@@ -1,0 +1,599 @@
+---
+title: Streaming Speech-to-Text API
+description: >-
+  Real-time audio transcription and translation with WebSocket connections.
+  Low-latency streaming for live applications with instant results and
+  interactive features.
+icon: wave-pulse
+canonical-url: 'https://docs.sarvam.ai/api-reference-docs/speech-to-text/apis/streaming'
+'og:title': Streaming Speech-to-Text API - Real-time WebSocket Transcription by Sarvam AI
+'og:description': >-
+  Real-time audio transcription with Sarvam AI's streaming speech-to-text API.
+  WebSocket connections for live transcription, translation, and interactive
+  applications.
+'og:type': article
+'og:site_name': Sarvam AI Developer Documentation
+'og:image':
+  type: url
+  value: >-
+    https://res.cloudinary.com/dvcb20x9a/image/upload/v1743510800/image_3_rpnrug.png
+'og:image:width': 1200
+'og:image:height': 630
+'twitter:card': summary_large_image
+'twitter:title': Streaming Speech-to-Text API - Real-time WebSocket Transcription by Sarvam AI
+'twitter:description': >-
+  Real-time audio transcription with Sarvam AI's streaming speech-to-text API.
+  WebSocket connections for live transcription, translation, and interactive
+  applications.
+'twitter:image':
+  type: url
+  value: >-
+    https://res.cloudinary.com/dvcb20x9a/image/upload/v1743510800/image_3_rpnrug.png
+'twitter:site': '@SarvamAI'
+---
+
+<h3>Real-time Processing</h3>
+<p>Process audio streams in real-time with WebSocket connections. Ideal for:</p>
+<ul>
+  <li>Live transcription</li>
+  <li>Real-time translation</li>
+  <li>Interactive applications</li>
+  <li>Low-latency requirements</li>
+</ul>
+
+## Features
+
+<CardGroup cols={1}>
+  <Card title="Real-time Processing" icon="wave-pulse">
+    - Live audio transcription - WebSocket-based streaming - Low latency
+    responses
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="Language Support" icon="language">
+    - Multiple Indian languages and English support  
+    - Language code specification (e.g., "kn-IN" for Kannada)  
+    - High accuracy transcription  
+  </Card>
+
+  <Card title="Integration" icon="code">
+    - Python and JavaScript SDK with async support  
+    - WebSocket connections  
+    - Easy-to-use API interface  
+    - WebSockets of STT and STTT only support `.wav` and raw PCM  
+  </Card>
+</CardGroup>
+
+### **Best Practices**
+
+- Send a continuous stream of audio data
+- Use 1 second of silence when VAD (Voice Activity Detection) sensitivity is FALSE
+- Use 0.5 seconds of silence when VAD (Voice Activity Detection) sensitivity is TRUE
+- One can send arbitrary length of audio
+
+<Note>
+  You can find sample audio files and their corresponding base64 encoded strings
+  in the{" "}
+  <a
+    href="https://github.com/sarvamai/sarvam-ai-cookbook/tree/main/sample_data/stt"
+    target="blank"
+  >
+    GitHub cookbook
+  </a>
+</Note>
+
+## Saarika: Our Speech to Text Transcription Model
+
+### Basic Streaming Transcription
+
+<Tabs>
+<Tab title="Python">
+```python
+import asyncio
+import base64
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def transcribe_stream():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    # Connect to streaming transcription
+    async with client.speech_to_text_streaming.connect(language_code="kn-IN") as ws:
+        # Send audio data
+        await ws.transcribe(audio=audio_data)
+        print("[Debug]: sent audio message")
+
+        # Receive transcription response
+        resp = await ws.recv()
+        print(f"[Debug]: received response: {resp}")
+
+if __name__ == "__main__":
+    asyncio.run(transcribe_stream())
+
+# --- Notebook/Colab usage ---
+# await transcribe_stream()
+```
+</Tab>
+<Tab title="JavaScript">
+```javascript
+import { SarvamAIClient } from "sarvamai";
+import * as fs from "fs";
+
+// Convert audio file to base64
+function audioFileToBase64(filePath) {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function main() {
+  const audioData = audioFileToBase64("/path/to/your/audio.wav");
+
+  const client = new SarvamAIClient();
+  const socket = await client.speechToTextStreaming.connect({
+    "language-code": "en-IN",
+    high_vad_sensitivity: "true",
+  });
+
+  socket.on("open", () => {
+    socket.transcribe({
+      audio: audioData,
+      sample_rate: 16000,
+      encoding: "audio/wav",
+    });
+  });
+
+  socket.on("message", (message) => {
+    console.log("Transcription:", JSON.stringify(message, null, 2));
+  });
+
+  await socket.waitForOpen();
+  await new Promise((resolve) => setTimeout(resolve, 10000));
+  socket.close();
+}
+
+main();
+```
+
+</Tab>
+</Tabs>
+
+## Streaming Guide
+
+<Tabs>
+  <Tab title="Query Parameters">
+
+<ul>
+  <li>
+    <code>language_code</code>: Specifies the language for speech recognition
+    (e.g., <code>en-IN</code>, <code>en-IN</code>, <code>kn-IN</code>, etc.).
+  </li>
+  <li>
+    <code>model</code>: Selects the speech-to-text model version (e.g.,{" "}
+    <code>saarika:v2.5</code>).
+  </li>
+  <li>
+    <code>high_vad_sensitivity</code>: Enables high sensitivity for Voice
+    Activity Detection (VAD), helpful in noisy or soft speech environments.
+  </li>
+  <li>
+    <code>vad_signals</code>: When enabled, provides VAD event signals in the
+    response stream:
+    <ul>
+      <li>"speech_start": Indicates the beginning of speech detection</li>
+      <li>"speech_end": Indicates the end of speech detection</li>
+      <li>"transcript": Contains the final transcription after speech end</li>
+    </ul>
+  </li>
+  <li>
+    <code>sample_rate</code>: Specifies the sample rate of the input audio in Hz (e.g., <code>8000</code>, <code>16000</code>, <code>44100</code>). Allows for optimal processing based on your audio quality.
+  </li>
+</ul>
+
+  </Tab>
+  <Tab title="Send Parameters">
+
+<ul>
+  <li>
+    <code>audio</code>: Main audio input object for real-time transcription.
+  </li>
+  <li>
+    <code>audio.data</code>: Base64-encoded chunk of audio data.
+  </li>
+  <li>
+    <code>audio.sample_rate</code>: Sampling rate of the audio in Hz (
+    <strong>16,000 Hz preferred</strong>).
+  </li>
+  <li>
+    <code>audio.encoding</code>: Format of the audio (e.g., <code>WAV</code>).
+  </li>
+  <li>
+    <code>input_audio_codec</code>: Specifies the input audio codec format (e.g., <code>"pcm"</code>, <code>"wav"</code>). This parameter allows you to specify the exact codec used for your audio data for optimal processing.
+  </li>
+</ul>
+
+  </Tab>
+</Tabs>
+
+## New Streaming Features
+
+### Sample Rate and Input Audio Codec Support
+
+STT streaming now supports specifying both the sample rate and input audio codec for better audio processing optimization.
+
+<Tabs>
+<Tab title="Python">
+
+```python
+import asyncio
+import base64
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def transcribe_with_codec_and_sample_rate():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    async with client.speech_to_text_streaming.connect(
+        language_code="kn-IN",
+        input_audio_codec="pcm",
+        sample_rate=16000,
+    ) as ws:
+        await ws.transcribe(audio=audio_data)
+        resp = await ws.recv()
+        print(resp)
+
+if __name__ == "__main__":
+    asyncio.run(transcribe_with_codec_and_sample_rate())
+```
+
+</Tab>
+</Tabs>
+
+### Example Usage
+
+#### Basic Streaming
+
+```python
+import base64
+import asyncio
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def transcribe_stream():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    async with client.speech_to_text_streaming.connect(
+        language_code="en-IN",
+        model="saarika:v2.5",
+        high_vad_sensitivity=True,
+    ) as ws:
+        await ws.transcribe(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=16000
+        )
+        response = await ws.recv()
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(transcribe_stream())
+```
+
+#### Streaming with VAD Signals
+
+When using VAD signals, the API returns multiple messages in sequence. You'll need to handle these messages appropriately and wait for the complete sequence (speech_start → speech_end → transcript). Here's an example:
+
+```python
+import base64
+import asyncio
+import contextlib
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def transcribe_stream():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    async with client.speech_to_text_streaming.connect(
+        language_code="en-IN",
+        model="saarika:v2.5",
+        high_vad_sensitivity=True,
+        vad_signals=True,
+    ) as ws:
+        await ws.transcribe(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=16000
+        )
+        print("[Debug]: Sent audio")
+
+        # Gracefully wait for streaming responses
+        with contextlib.suppress(asyncio.TimeoutError):
+            async with asyncio.timeout(10):  # Adjust timeout as needed
+                async for message in ws:
+                    print(message)
+                    # Example message sequence:
+                    # {"type": "speech_start"}
+                    # {"type": "speech_end"}
+                    # {"type": "transcript", "text": "Your transcribed text here"}
+
+if __name__ == "__main__":
+    asyncio.run(transcribe_stream())
+```
+
+<Note>
+  **Note**: When using `vad_signals=True`, expect a slight delay between
+  receiving the "speech_end" signal and the final transcript. This delay allows
+  the model to process the complete audio segment and generate accurate
+  transcription. The timeout in the example above can be adjusted based on your
+  audio length and requirements.
+</Note>
+## Saaras Model: Our Speech to Text Translation Model
+
+### Streaming Translation
+
+<Tabs>
+<Tab title="Python">
+```python
+import asyncio
+import base64
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def translate_stream():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    # Connect to streaming translation
+    async with client.speech_to_text_translate_streaming.connect() as ws:
+        # Send audio for translation
+        await ws.translate(audio=audio_data)
+        print("[Debug]: sent audio message")
+
+        # Receive translation response
+        resp = await ws.recv()
+        print(f"[Debug]: received response: {resp}")
+
+if __name__ == "__main__":
+    asyncio.run(translate_stream())
+
+# --- Notebook/Colab usage ---
+# await translate_stream()
+```
+</Tab>
+<Tab title="JavaScript">
+```javascript
+import { SarvamAIClient } from "sarvamai";
+import * as fs from "fs";
+
+// Convert audio file to base64
+function audioFileToBase64(filePath: string): string {
+  return fs.readFileSync(filePath).toString("base64");
+}
+
+async function main() {
+  const audioData = audioFileToBase64("path/to/your/audio.wav");
+
+  const client = new SarvamAIClient();
+  const socket = await client.speechToTextTranslateStreaming.connect({
+    high_vad_sensitivity: "true",
+  });
+
+  socket.on("open", () => {
+    socket.translate({
+      audio: audioData,
+      sample_rate: 16000,
+      encoding: "audio/wav",
+    });
+  });
+
+  socket.on("message", (message) => {
+    console.log("Transcription:", JSON.stringify(message, null, 2));
+  });
+
+  await socket.waitForOpen();
+  await new Promise((resolve) => setTimeout(resolve, 10000));
+  socket.close();
+}
+
+main();
+
+```
+
+</Tab>
+</Tabs>
+
+## STT Translation Streaming Guide
+
+<Tabs>
+  <Tab title="Query Parameters">
+
+<ul>
+  <li>
+    <code>model</code>: Selects the speech-to-text model version (e.g.,{" "}
+    <code>saaras:v2.5</code>).
+  </li>
+  <li>
+    <code>high_vad_sensitivity</code>: Enables high sensitivity for Voice
+    Activity Detection (VAD), helpful in noisy or soft speech environments.
+  </li>
+  <li>
+    <code>vad_signals</code>: When enabled, provides VAD event signals in the response stream:
+    <ul>
+      <li>"speech_start": Indicates the beginning of speech detection</li>
+      <li>"speech_end": Indicates the end of speech detection</li>
+      <li>"transcript": Contains the transcription and translation after speech end</li>
+    </ul>
+  </li>
+  <li>
+    <code>sample_rate</code>: Specifies the sample rate of the input audio in Hz (e.g., <code>8000</code>, <code>16000</code>, <code>44100</code>). Allows for optimal processing based on your audio quality.
+  </li>
+</ul>
+</Tab>
+  <Tab title="Send Parameters">
+
+<ul>
+  <li>
+    <code>audio</code>: Main audio input object for real-time transcription and
+    translation.
+  </li>
+  <li>
+    <code>audio.data</code>: Base64-encoded chunk of audio data.
+  </li>
+  <li>
+    <code>audio.sample_rate</code>: Sampling rate of the audio in Hz (
+    <strong>16,000 Hz preferred</strong>).
+  </li>
+  <li>
+    <code>audio.encoding</code>: Format of the audio (e.g., <code>WAV</code>).
+  </li>
+</ul>
+
+  </Tab>
+</Tabs>
+### Example Usage
+
+#### Basic Streaming
+
+```python
+import asyncio
+import base64
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def translate_stream():
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    async with client.speech_to_text_translate_streaming.connect(
+        model="saaras:v2.5"
+    ) as ws:
+        await ws.translate(
+            audio=audio_data,
+            encoding="audio/wav",
+            sample_rate=16000
+        )
+        response = await ws.recv()
+        print(response)
+
+if __name__ == "__main__":
+    asyncio.run(translate_stream())
+```
+
+#### Streaming with VAD Signals
+
+When using VAD signals, the API returns multiple messages in sequence. You'll need to handle these messages appropriately and wait for the complete sequence (speech_start → speech_end → transcript). Here's an example:
+
+```python
+import asyncio
+import contextlib
+from sarvamai import AsyncSarvamAI
+import base64
+# Load and encode audio file
+with open("path/to/your/audio.wav", "rb") as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+async def translate_stream():
+    client = AsyncSarvamAI(api_subscription_key="YOUR_API_SUBSCRIPTION_KEY")
+
+    async with client.speech_to_text_translate_streaming.connect(
+        model="saaras:v2.5",
+        vad_signals=True
+    ) as ws:
+        # Send audio data
+        await ws.translate(audio=audio_data, encoding="audio/wav", sample_rate=16000)
+        print("[Debug]: Sent audio")
+
+        # Gracefully wait for streaming responses
+        with contextlib.suppress(asyncio.TimeoutError):
+            async with asyncio.timeout(10):  # Adjust timeout as needed
+                async for message in ws:
+                    print(message)
+                    # Example message sequence:
+                    # {"type": "speech_start"}
+                    # {"type": "speech_end"}
+                    # {"type": "translation", "text": "Translated text here"}
+
+if __name__ == "__main__":
+    asyncio.run(translate_stream())
+
+```
+
+<Note>
+  When using `vad_signals=True`, expect a slight delay between receiving the
+  "speech_end" signal and the final transcript with translation. This delay
+  allows the model to process the complete audio segment, generate
+  transcription, and perform translation. The timeout in the example above can
+  be adjusted based on your audio length and requirements.
+</Note>
+
+## Flush Signal
+
+When streaming audio, you may want to flush the buffer before sending a new chunk.  
+The `flush_signal` lets you:  
+- **Immediately process** everything in the current buffer and get a transcript without waiting.  
+- **Reduce latency** so that interactive experiences (like live captions or assistants) feel more natural.  
+- **Take control** of when audio is finalized, instead of relying only on silence detection or timeouts.  
+
+
+### Example Usage with `flush_signal`
+
+#### Python
+
+```python
+import base64
+import asyncio
+from sarvamai import AsyncSarvamAI
+
+# Load and encode audio file
+with open(
+    "path/to/your/audio.wav",
+    "rb",
+) as f:
+    audio_data = base64.b64encode(f.read()).decode("utf-8")
+
+
+async def test_flush_signal():
+    """Simple test script for flush signal functionality"""
+
+    # Initialize client
+    client = AsyncSarvamAI(api_subscription_key="your-api-key")
+
+    # Connect to streaming service
+    async with client.speech_to_text_translate_streaming.connect() as ws:
+        print("Connected to streaming service")
+
+        # Send audio data
+        await ws.translate(audio=audio_data, encoding="audio/wav", sample_rate=16000)
+        print("Audio sent successfully")
+
+        # Send flush signal to process audio buffer
+        await ws.flush()
+        print("Flush signal sent")
+
+        # Collect responses
+        print("\nReceiving responses:")
+        async for message in ws:
+            print(f"Response: {message}")
+
+            # Stop after getting some responses to avoid infinite loop
+            break
+
+
+if __name__ == "__main__":
+    asyncio.run(test_flush_signal())
+```
