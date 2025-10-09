@@ -19,7 +19,7 @@ class OllamaService:
     """Service for interacting with Ollama LLM API."""
 
     def __init__(self):
-        self.api_url = os.getenv('OLLAMA_API_URL', 'https://ebf431ea9bc8.ngrok-free.app')
+        self.api_url = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
         self.model = os.getenv('OLLAMA_MODEL', 'llama3.2')
         self.available = False
 
@@ -30,27 +30,36 @@ class OllamaService:
         self._test_connection()
 
     def _test_connection(self):
-        """Test connection to Ollama API."""
+        """Test connection to Ollama Cloud API."""
         try:
-            response = requests.get(f"{self.api_url}/api/tags", timeout=5)
+            # Test with a simple chat completion request
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {os.getenv("OLLAMA_API_KEY", "")}'
+            }
+
+            payload = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "test"}],
+                "stream": False
+            }
+
+            response = requests.post(
+                f"{self.api_url}/api/chat",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+
             if response.status_code == 200:
-                models = response.json().get('models', [])
-                model_names = [m.get('name', '') for m in models]
-
-                # Check if our model is available
-                model_available = any(self.model in name for name in model_names)
-
-                if model_available:
-                    self.available = True
-                    logger.info(f"Ollama service initialized successfully with model: {self.model}")
-                else:
-                    logger.warning(f"Model '{self.model}' not found. Available models: {model_names}")
-                    logger.info("Run 'ollama pull {model}' to download the model")
+                self.available = True
+                logger.info(f"Ollama Cloud service initialized successfully with model: {self.model}")
             else:
-                logger.warning(f"Ollama API returned status code: {response.status_code}")
+                logger.warning(f"Ollama Cloud API returned status code: {response.status_code}")
+                logger.warning(f"Response: {response.text}")
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Failed to connect to Ollama API at {self.api_url}: {str(e)}")
-            logger.info("Make sure Ollama is running with 'ollama serve'")
+            logger.warning(f"Failed to connect to Ollama Cloud API at {self.api_url}: {str(e)}")
+            logger.info("Make sure your Ollama Cloud endpoint is accessible")
 
     def is_available(self) -> bool:
         """Check if Ollama service is available."""
@@ -133,7 +142,7 @@ class OllamaService:
 
     def _generate_completion(self, prompt: str, temperature: float = 0.7, max_tokens: int = 500) -> str:
         """
-        Generate completion using Ollama API.
+        Generate completion using Ollama Cloud API.
 
         Args:
             prompt: The prompt to send to Ollama
@@ -144,9 +153,16 @@ class OllamaService:
             Generated text response
         """
         try:
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {os.getenv("OLLAMA_API_KEY", "")}'
+            }
+
             payload = {
                 "model": self.model,
-                "prompt": prompt,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
                 "stream": False,
                 "options": {
                     "temperature": temperature,
@@ -155,20 +171,22 @@ class OllamaService:
             }
 
             response = requests.post(
-                f"{self.api_url}/api/generate",
+                f"{self.api_url}/api/chat",
                 json=payload,
+                headers=headers,
                 timeout=60
             )
 
             if response.status_code == 200:
                 result = response.json()
-                return result.get('response', '')
+                message = result.get('message', {})
+                return message.get('content', '')
             else:
-                logger.error(f"Ollama API error: {response.status_code} - {response.text}")
+                logger.error(f"Ollama Cloud API error: {response.status_code} - {response.text}")
                 return ""
 
         except Exception as e:
-            logger.error(f"Error calling Ollama API: {str(e)}")
+            logger.error(f"Error calling Ollama Cloud API: {str(e)}")
             return ""
 
     def _build_flow_generation_prompt(self, call_context: Dict[str, Any]) -> str:
