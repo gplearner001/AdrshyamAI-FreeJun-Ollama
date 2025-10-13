@@ -1,7 +1,7 @@
 # Phone Audio Speech Detection - Changes Summary
 
 ## Problem
-Phone call audio chunks were consistently showing "No speech detected" even when speech was present, while the same VAD system worked correctly for microphone audio from the WebSocket Audio Client.
+Phone call audio chunks were consistently showing "No speech detected" even when speech was present, while the same VAD system worked correctly for microphone audio from the AdrshyamAI Audio Client.
 
 ## Root Cause Analysis
 1. **Phone audio has different characteristics than microphone audio**:

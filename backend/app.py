@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Teler Call Service Backend - Legacy Flask App
+AdrshyamAI Call Service Backend - Legacy Flask App
 This file is kept for compatibility but the main app is now fastapi_app.py
 """
 

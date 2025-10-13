@@ -643,7 +643,7 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
           <Radio className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">WebSocket Audio Client</h2>
+          <h2 className="text-2xl font-bold text-gray-800">AdrshyamAI Audio Client</h2>
           <p className="text-sm text-gray-600">Direct microphone to Teler WebSocket streaming</p>
         </div>
       </div>

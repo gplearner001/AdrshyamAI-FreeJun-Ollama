@@ -53,7 +53,7 @@ OLLAMA_MODEL=llama3.2
 - Updated model name display
 
 #### `src/components/AIConversationPanel.tsx`
-- Updated branding text: "Powered by Claude" → "Powered by Ollama"
+- Updated branding text: "Powered by Claude" → "Powered by AdrshyamAI"
 - Updated placeholder text: "Ask Claude anything..." → "Ask Ollama anything..."
 - Updated loading text: "Claude is thinking..." → "Ollama is thinking..."
 - Changed color scheme: purple/pink gradients → green/emerald gradients

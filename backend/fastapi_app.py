@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
-app = FastAPI(title="Teler Call Service", version="1.0.0")
+app = FastAPI(title="AdrshyamAI Call Service", version="1.0.0")
 
 # Add CORS middleware
 app.add_middleware(
@@ -445,7 +445,7 @@ async def get_websocket_streams():
 async def associate_knowledge_base(data: dict = Body(...)):
     """
     Associate a knowledge base with a call.
-    Used by WebSocket audio client to link KB with direct WebSocket connections.
+    Used by AdrshyamAI Audio Client to link KB with direct WebSocket connections.
     """
     try:
         call_id = data.get('call_id')
@@ -478,7 +478,7 @@ async def associate_knowledge_base(data: dict = Body(...)):
                 'knowledge_base_id': knowledge_base_id,
                 'timestamp': datetime.now().isoformat(),
                 'call_type': 'websocket',
-                'notes': 'WebSocket audio client connection'
+                'notes': 'AdrshyamAI Audio Client connection'
             }
 
             call_history.insert(0, call_record)

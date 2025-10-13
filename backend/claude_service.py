@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Claude AI Service for Teler Call Service
+Claude AI Service for AdrshyamAI Call Service
 Provides AI-powered call flow generation and conversation handling.
 """
 

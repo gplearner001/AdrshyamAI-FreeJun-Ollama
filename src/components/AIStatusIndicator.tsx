@@ -43,7 +43,7 @@ export const AIStatusIndicator: React.FC = () => {
     return (
       <div className="flex items-center gap-2 text-red-600">
         <Brain className="w-4 h-4" />
-        <span className="text-sm">AI Service Offline</span>
+        <span className="text-sm">AdrshyamAI Service Offline</span>
       </div>
     );
   }
@@ -59,8 +59,8 @@ export const AIStatusIndicator: React.FC = () => {
       )}
       <span className="text-sm">
         {aiStatus.ollama_available
-          ? `Ollama LLM Active (${aiStatus.model || 'llama3.2'})`
-          : 'AI Service Unavailable'
+          ? `AdrshyamAI LLM Active`
+          : 'AdrshyamAI Service Unavailable'
         }
       </span>
     </div>

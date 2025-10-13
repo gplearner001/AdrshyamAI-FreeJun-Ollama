@@ -69,7 +69,7 @@ function App() {
         {/* ✅ Corrected footer closing tag */}
         <footer className="mt-16 text-center text-gray-600">
           <p className="text-sm">
-            © 2025 Teler Call Service • Built with React & Node.js
+            © 2025 AdrshyamAI Call Service • Built with React & Node.js
           </p>
         </footer>
 

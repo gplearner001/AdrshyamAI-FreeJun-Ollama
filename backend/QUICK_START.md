@@ -47,7 +47,7 @@ Expected output should show:
    ```
 
 ### Test 3: Check WebSocket microphone still works
-1. Click "WebSocket Audio Client" in frontend
+1. Click "AdrshyamAI Audio Client" in frontend
 2. Record audio with microphone
 3. Verify STT still works correctly
 
@@ -182,7 +182,7 @@ For detailed information, see:
 ## Success Criteria
 
 ✅ Phone audio speech detected correctly (>95% success rate)
-✅ Microphone audio still works (WebSocket Audio Client)
+✅ Microphone audio still works (AdrshyamAI Audio Client)
 ✅ Logs show audio characteristics (RMS, peak, duration)
 ✅ False positive rate < 5%
 ✅ Processing latency < 20ms per chunk

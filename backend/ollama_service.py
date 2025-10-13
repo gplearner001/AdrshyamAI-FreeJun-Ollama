@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ollama LLM Service for Teler Call Service
+Ollama LLM Service for AdrshyamAI Call Service
 Provides AI-powered call flow generation and conversation handling using Ollama.
 """
 

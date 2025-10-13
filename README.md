@@ -1,4 +1,4 @@
-# Teler Call Service
+# AdrshyamAI Call Service
 
 A professional full-stack application for initiating voice calls using the official Teler Python library. Built with React, TypeScript, and Python Flask.
 

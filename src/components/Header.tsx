@@ -10,14 +10,9 @@ export const Header: React.FC = () => {
             <Phone className="w-8 h-8" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Teler Call Service</h1>
+            <h1 className="text-3xl font-bold">AdrshyamAI Call Service</h1>
             <p className="text-blue-100 text-lg">Professional Voice Call Initiation Platform</p>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2 text-blue-100">
-          <Zap className="w-5 h-5" />
-          <span className="text-sm">Powered by Teler API • Real-time Call Management</span>
         </div>
       </div>
     </header>

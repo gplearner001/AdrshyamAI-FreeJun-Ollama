@@ -83,7 +83,7 @@ export const AIConversationPanel: React.FC<AIConversationPanelProps> = ({
             <Brain className="w-5 h-5 text-white" />
           </div>
           <h3 className="text-lg font-semibold text-gray-800">AI Conversation</h3>
-          <span className="text-sm text-gray-500">Powered by Ollama</span>
+          <span className="text-sm text-gray-500">Powered by AdrshyamAI</span>
         </div>
 
         <KnowledgeBaseSelector
@@ -98,7 +98,7 @@ export const AIConversationPanel: React.FC<AIConversationPanelProps> = ({
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p>Start a conversation with Ollama LLM</p>
+            <p>Start a conversation with AdrshyamAI</p>
             <p className="text-sm text-gray-400 mt-1">
               {selectedKnowledgeBaseId
                 ? 'Ask questions based on your knowledge base documents'
