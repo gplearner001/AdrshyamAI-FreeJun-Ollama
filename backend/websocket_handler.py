@@ -389,6 +389,14 @@ class TelerWebSocketHandler:
             # Get current language for this connection
             current_language = self.call_states.get(connection_id, {}).get('current_language', 'en-IN')
 
+            # Check if user wants to end the call
+            if self._is_end_call_request(user_input):
+                logger.info(f"🛑 User requested to end call: {connection_id} (language: {current_language})")
+                logger.info(f"📞 Initiating call termination sequence...")
+                await self._end_call_with_goodbye(connection_id, current_language)
+                logger.info(f"✅ Call termination sequence completed for {connection_id}")
+                return
+
             # Generate AI response using Claude
             logger.info(f"🤖 Generating AI response with Claude (language: {current_language})...")
             ai_response = await self._generate_ai_response(user_input, connection_id)
@@ -755,29 +763,62 @@ class TelerWebSocketHandler:
         websocket = self.active_connections.get(connection_id)
         if not websocket:
             return
-        
+
+        # Get current language
+        current_language = self.call_states.get(connection_id, {}).get('current_language', 'en-IN')
+
+        # Multi-language silence warnings
         if warning_number == 1:
-            warning_text = "क्या आप वहाँ हैं? कृपया बोलें।"  # "Are you there? Please speak."
+            warning_texts = {
+                'en-IN': "Are you there? Please speak.",
+                'hi-IN': "क्या आप वहाँ हैं? कृपया बोलें।",
+                'bn-IN': "আপনি কি সেখানে আছেন? অনুগ্রহ করে কথা বলুন।",
+                'gu-IN': "શું તમે ત્યાં છો? કૃપા કરીને બોલો.",
+                'kn-IN': "ನೀವು ಅಲ್ಲಿದ್ದೀರಾ? ದಯವಿಟ್ಟು ಮಾತನಾಡಿ.",
+                'ml-IN': "നിങ്ങൾ അവിടെ ഉണ്ടോ? ദയവായി സംസാരിക്കൂ.",
+                'mr-IN': "तुम्ही तिथे आहात का? कृपया बोला.",
+                'or-IN': "ଆପଣ ସେଠାରେ ଅଛନ୍ତି କି? ଦୟାକରି କୁହନ୍ତୁ।",
+                'pa-IN': "ਕੀ ਤੁਸੀਂ ਉਥੇ ਹੋ? ਕਿਰਪਾ ਕਰਕੇ ਬੋਲੋ।",
+                'ta-IN': "நீங்கள் அங்கே இருக்கிறீர்களா? தயவுசெய்து பேசுங்கள்.",
+                'te-IN': "మీరు అక్కడ ఉన్నారా? దయచేసి మాట్లాడండి."
+            }
         else:
-            warning_text = "मैं आपका इंतज़ार कर रहा हूँ। कुछ और कहना चाहते हैं?"  # "I'm waiting for you. Anything else you'd like to say?"
-        
-        logger.info(f"Sending silence warning {warning_number} to {connection_id}")
-        
+            warning_texts = {
+                'en-IN': "I'm waiting for you. Anything else you'd like to say?",
+                'hi-IN': "मैं आपका इंतज़ार कर रहा हूँ। कुछ और कहना चाहते हैं?",
+                'bn-IN': "আমি আপনার জন্য অপেক্ষা করছি। আর কিছু বলতে চান?",
+                'gu-IN': "હું તમારી રાહ જોઉં છું. બીજું કંઈ કહેવા માંગો છો?",
+                'kn-IN': "ನಾನು ನಿಮಗಾಗಿ ಕಾಯುತ್ತಿದ್ದೇನೆ. ಇನ್ನೇನಾದರೂ ಹೇಳಲು ಬಯಸುತ್ತೀರಾ?",
+                'ml-IN': "ഞാൻ നിങ്ങൾക്കായി കാത്തിരിക്കുന്നു. മറ്റെന്തെങ്കിലും പറയാനുണ്ടോ?",
+                'mr-IN': "मी तुमची वाट पाहत आहे. आणखी काही सांगायचे आहे का?",
+                'or-IN': "ମୁଁ ଆପଣଙ୍କ ପାଇଁ ଅପେକ୍ଷା କରୁଛି। ଆଉ କିଛି କହିବାକୁ ଚାହୁଁଛନ୍ତି କି?",
+                'pa-IN': "ਮੈਂ ਤੁਹਾਡੀ ਉਡੀਕ ਕਰ ਰਿਹਾ ਹਾਂ। ਕੁਝ ਹੋਰ ਕਹਿਣਾ ਚਾਹੁੰਦੇ ਹੋ?",
+                'ta-IN': "நான் உங்களுக்காக காத்திருக்கிறேன். வேறு ஏதாவது சொல்ல விரும்புகிறீர்களா?",
+                'te-IN': "నేను మీ కోసం ఎదురు చూస్తున్నాను. ఇంకా ఏదైనా చెప్పాలనుకుంటున్నారా?"
+            }
+
+        warning_text = warning_texts.get(current_language, warning_texts['en-IN'])
+
+        logger.info(f"Sending silence warning {warning_number} to {connection_id} in {current_language}")
+
+        # Get appropriate speaker
+        speaker = self._get_speaker_for_language(current_language)
+
         warning_audio = await sarvam_service.text_to_speech(
             text=warning_text,
-            language="en-IN",
-            speaker="meera"
+            language=current_language,
+            speaker=speaker
         )
-        
+
         if warning_audio:
             warning_message = {
                 "type": "audio",
                 "audio_b64": warning_audio,
                 "chunk_id": self.chunk_counter
             }
-            
+
             self.chunk_counter += 1
-            
+
             try:
                 await websocket.send_text(json.dumps(warning_message))
                 logger.info(f"✅ Sent silence warning {warning_number} to {connection_id}")
@@ -785,56 +826,91 @@ class TelerWebSocketHandler:
                 logger.error(f"Failed to send silence warning: {e}")
     
     async def _end_call_gracefully(self, connection_id: str):
-        """End the call gracefully with a thank you message"""
+        """End the call gracefully with a thank you message (auto-timeout)"""
+        current_language = self.call_states.get(connection_id, {}).get('current_language', 'en-IN')
+        await self._end_call_with_goodbye(connection_id, current_language, reason="inactivity")
+
+    async def _end_call_with_goodbye(self, connection_id: str, language: str = 'en-IN', reason: str = "user_request"):
+        """End the call with a goodbye message in the specified language"""
+        logger.info(f"🔚 _end_call_with_goodbye called for {connection_id} (language: {language}, reason: {reason})")
+
         websocket = self.active_connections.get(connection_id)
         if not websocket:
+            logger.warning(f"⚠️ No active websocket found for {connection_id}")
             return
-        
-        # Mark call as ended
+
+        # Mark call as ended FIRST to prevent any further processing
+        logger.info(f"🚫 Marking call as ended for {connection_id}")
         if connection_id in self.call_states:
             self.call_states[connection_id]['call_ended'] = True
             self.call_states[connection_id]['status'] = 'ended'
-        
-        farewell_text = "धन्यवाद आपने कॉल किया। आपका दिन शुभ हो। नमस्ते!"  # "Thank you for calling. Have a good day. Goodbye!"
-        
-        logger.info(f"Ending call gracefully for {connection_id}")
-        
+            logger.info(f"✅ Call state updated: call_ended={self.call_states[connection_id]['call_ended']}")
+
+        # Multi-language goodbye messages
+        farewell_texts = {
+            'en-IN': "Thank you for calling. Have a great day. Goodbye!",
+            'hi-IN': "कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो। नमस्ते!",
+            'bn-IN': "কল করার জন্য ধন্যবাদ। আপনার দিন শুভ হোক। বিদায়!",
+            'gu-IN': "કૉલ કરવા બદલ આભાર. તમારો દિવસ સારો રહે. ગુડબાય!",
+            'kn-IN': "ಕರೆ ಮಾಡಿದ್ದಕ್ಕಾಗಿ ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ದಿನ ಶುಭವಾಗಲಿ. ವಿದಾಯ!",
+            'ml-IN': "വിളിച്ചതിന് നന്ദി. നിങ്ങളുടെ ദിവസം നല്ലതായിരിക്കട്ടെ. വിട!",
+            'mr-IN': "कॉल केल्याबद्दल धन्यवाद. तुमचा दिवस चांगला जावो. निरोप!",
+            'or-IN': "କଲ କରିବା ପାଇଁ ଧନ୍ୟବାଦ। ଆପଣଙ୍କ ଦିନ ଭଲ ହେଉ। ଗୁଡବାଇ!",
+            'pa-IN': "ਕਾਲ ਕਰਨ ਲਈ ਧੰਨਵਾਦ। ਤੁਹਾਡਾ ਦਿਨ ਚੰਗਾ ਰਹੇ। ਅਲਵਿਦਾ!",
+            'ta-IN': "அழைத்ததற்கு நன்றி. உங்கள் நாள் இனிதாக அமையட்டும். குட்பை!",
+            'te-IN': "కాల్ చేసినందుకు ధన్యవాదాలు. మీ రోజు మంచిగా ఉండాలి. వీడ్కోలు!"
+        }
+
+        farewell_text = farewell_texts.get(language, farewell_texts['en-IN'])
+
+        logger.info(f"🎬 Ending call gracefully for {connection_id} (reason: {reason}, language: {language})")
+        logger.info(f"💬 Farewell text: '{farewell_text}'")
+
+        # Get appropriate speaker
+        speaker = self._get_speaker_for_language(language)
+        logger.info(f"🗣️ Using speaker: {speaker}")
+
+        logger.info(f"🔊 Generating farewell TTS audio...")
         farewell_audio = await sarvam_service.text_to_speech(
             text=farewell_text,
-            language="en-IN",
-            speaker="meera"
+            language=language,
+            speaker=speaker
         )
-        
+
         if farewell_audio:
+            logger.info(f"✅ Farewell audio generated successfully")
             farewell_message = {
                 "type": "audio",
                 "audio_b64": farewell_audio,
                 "chunk_id": self.chunk_counter
             }
-            
+
             self.chunk_counter += 1
-            
+
             try:
                 await websocket.send_text(json.dumps(farewell_message))
-                logger.info(f"✅ Sent farewell message to {connection_id}")
-                
-                # Wait a bit for the message to be sent, then close
-                await asyncio.sleep(3)
-                
+                logger.info(f"✅ Sent farewell message to {connection_id} in {language}")
+
+                # Wait for the message to be sent and played
+                # Increased to 5 seconds to ensure non-English messages have time to play
+                logger.info(f"⏳ Waiting 5 seconds for farewell audio to play...")
+                await asyncio.sleep(5)
+                logger.info(f"✅ Farewell audio playback time elapsed, proceeding with connection closure")
+
             except Exception as e:
                 logger.error(f"Failed to send farewell message: {e}")
-        
-        # Cancel silence timer
-        if connection_id in self.silence_timers:
-            self.silence_timers[connection_id].cancel()
-            del self.silence_timers[connection_id]
-        
+
         # Close the WebSocket connection
         try:
-            await websocket.close(code=1000, reason="Call ended due to inactivity")
+            close_reason = "Call ended due to inactivity" if reason == "inactivity" else "Call ended by user"
+            await websocket.close(code=1000, reason=close_reason)
             logger.info(f"✅ Closed WebSocket connection for {connection_id}")
         except Exception as e:
             logger.error(f"Error closing WebSocket: {e}")
+
+        # Clean up all connection resources
+        # This ensures proper cleanup even if websocket close doesn't trigger the finally block immediately
+        self.disconnect(connection_id)
     
     async def send_interrupt(self, connection_id: str, chunk_id: int):
         """Send interrupt message to stop specific chunk playback"""
@@ -874,6 +950,52 @@ class TelerWebSocketHandler:
     def get_active_streams(self) -> Dict[str, Dict[str, Any]]:
         """Get all active stream metadata"""
         return self.stream_metadata.copy()
+
+    def _is_end_call_request(self, text: str) -> bool:
+        """Check if user wants to end the call"""
+        if not text:
+            return False
+
+        text_lower = text.lower().strip()
+        logger.debug(f"🔍 Checking if text is end call request: '{text_lower}'")
+
+        # End call phrases in multiple languages
+        end_phrases = [
+            # English
+            "goodbye", "bye", "end call", "hang up", "disconnect", "that's all",
+            "nothing else", "no more", "i'm done", "thank you bye", "thanks bye",
+            "end the call", "finish the call", "bye bye", "good bye",
+            # Hindi
+            "धन्यवाद", "अलविदा", "नमस्ते", "कॉल खत्म करो", "कॉल बंद करो",
+            "बस इतना ही", "और कुछ नहीं", "काफी है", "हो गया",
+            # Bengali
+            "ধন্যবাদ", "বিদায়", "কল শেষ করুন", "যথেষ্ট",
+            # Gujarati
+            "આભાર", "ગુડબાય", "કૉલ બંધ કરો", "બસ",
+            # Kannada
+            "ಧನ್ಯವಾದ", "ವಿದಾಯ", "ಕರೆ ಮುಗಿಸಿ", "ಸಾಕು",
+            # Malayalam
+            "നന്ദി", "വിട", "കോൾ അവസാനിപ്പിക്കുക", "മതി",
+            # Marathi
+            "धन्यवाद", "निरोप", "कॉल बंद करा", "पुरे झाले",
+            # Odia
+            "ଧନ୍ୟବାଦ", "ଗୁଡବାଇ", "କଲ୍ ଶେଷ କରନ୍ତୁ",
+            # Punjabi
+            "ਧੰਨਵਾਦ", "ਅਲਵਿਦਾ", "ਕਾਲ ਖਤਮ ਕਰੋ",
+            # Tamil
+            "நன்றி", "குட்பை", "அழைப்பை முடிக்கவும்", "போதும்",
+            # Telugu
+            "ధన్యవాదాలు", "వీడ్కోలు", "కాల్ ముగించు", "చాలు"
+        ]
+
+        # Check if any end phrase is in the text
+        for phrase in end_phrases:
+            if phrase in text_lower:
+                logger.info(f"🛑 DETECTED END CALL PHRASE: '{phrase}' in user text: '{text}'")
+                return True
+
+        logger.debug(f"✅ Not an end call request")
+        return False
 
     def _get_knowledge_base_for_call(self, call_id: str, stream_id: str = None, account_id: str = None) -> Optional[str]:
         """Look up knowledge base ID associated with a call using multiple possible identifiers"""
