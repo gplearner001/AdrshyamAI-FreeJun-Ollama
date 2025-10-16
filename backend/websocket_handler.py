@@ -76,27 +76,52 @@ class TelerWebSocketHandler:
 
             call_id = stream_metadata.get('call_id', connection_id)
 
+            # Try to get from_number and to_number from stream_metadata first
+            from_number = stream_metadata.get('from_number')
+            to_number = stream_metadata.get('to_number')
+
+            # If not in stream_metadata, try to get from call_history
+            if not from_number or not to_number:
+                logger.info(f"from_number or to_number not in stream_metadata, looking in call_history for call_id: {call_id}")
+                try:
+                    from fastapi_app import call_history
+                    for call in call_history:
+                        if call.get('call_id') == call_id:
+                            from_number = from_number or call.get('from_number')
+                            to_number = to_number or call.get('to_number')
+                            logger.info(f"Found in call_history - from_number: {from_number}, to_number: {to_number}")
+                            break
+                except Exception as e:
+                    logger.warning(f"Could not retrieve from call_history: {e}")
+
             # Prepare metadata
             metadata = {
                 'call_type': 'phone_call',
                 'start_time': stream_metadata.get('started_at'),
                 'end_time': datetime.now().isoformat(),
                 'connection_id': connection_id,
-                'from_number': stream_metadata.get('from_number'),
-                'to_number': stream_metadata.get('to_number')
+                'from_number': from_number,
+                'to_number': to_number
             }
 
-            logger.info(f"Saving call transcript for call_id: {call_id}")
+            logger.info(f"Saving call transcript for call_id: {call_id} (from: {from_number}, to: {to_number})")
 
             # Save to database
             if database_service.is_available():
+                # Update stream_metadata with the retrieved phone numbers for database save
+                updated_stream_metadata = stream_metadata.copy()
+                if from_number:
+                    updated_stream_metadata['from_number'] = from_number
+                if to_number:
+                    updated_stream_metadata['to_number'] = to_number
+
                 success = database_service.save_call_transcript(
                     call_id=call_id,
                     connection_id=connection_id,
                     conversation=conversation,
                     metadata=metadata,
                     call_state=call_state,
-                    stream_metadata=stream_metadata
+                    stream_metadata=updated_stream_metadata
                 )
 
                 if success:
