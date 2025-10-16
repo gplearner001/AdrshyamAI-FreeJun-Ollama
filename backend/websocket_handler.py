@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from sarvam_service import sarvam_service
 from ollama_service import ollama_service
 from vad_processor import vad_processor
+from database_service import database_service
+from webhook_service import webhook_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,31 +63,98 @@ class TelerWebSocketHandler:
         logger.info(f"WebSocket connected: {connection_id}")
         return connection_id
     
+    async def _save_call_transcript(self, connection_id: str):
+        """Save call transcript to database and send to webhook"""
+        try:
+            conversation = self.conversation_history.get(connection_id, [])
+            call_state = self.call_states.get(connection_id, {})
+            stream_metadata = self.stream_metadata.get(connection_id, {})
+
+            if not conversation:
+                logger.info(f"No conversation history to save for {connection_id}")
+                return
+
+            call_id = stream_metadata.get('call_id', connection_id)
+
+            # Prepare metadata
+            metadata = {
+                'call_type': 'phone_call',
+                'start_time': stream_metadata.get('started_at'),
+                'end_time': datetime.now().isoformat(),
+                'connection_id': connection_id,
+                'from_number': stream_metadata.get('from_number'),
+                'to_number': stream_metadata.get('to_number')
+            }
+
+            logger.info(f"Saving call transcript for call_id: {call_id}")
+
+            # Save to database
+            if database_service.is_available():
+                success = database_service.save_call_transcript(
+                    call_id=call_id,
+                    connection_id=connection_id,
+                    conversation=conversation,
+                    metadata=metadata,
+                    call_state=call_state,
+                    stream_metadata=stream_metadata
+                )
+
+                if success:
+                    logger.info(f"Call transcript saved to database: {call_id}")
+                else:
+                    logger.warning(f"Failed to save call transcript to database: {call_id}")
+            else:
+                logger.warning("Database service not available, transcript not saved")
+
+            # Send to webhook if configured
+            if webhook_service.is_configured():
+                logger.info(f"Sending call transcript to webhook for call_id: {call_id}")
+                webhook_success = await webhook_service.send_transcript(
+                    call_id=call_id,
+                    conversation=conversation,
+                    metadata=metadata
+                )
+
+                if webhook_success:
+                    logger.info(f"Call transcript sent to webhook: {call_id}")
+                    # Mark as sent in database
+                    if database_service.is_available():
+                        database_service.mark_webhook_sent(call_id)
+                else:
+                    logger.warning(f"Failed to send call transcript to webhook: {call_id}")
+            else:
+                logger.debug("Webhook not configured, skipping webhook delivery")
+
+        except Exception as e:
+            logger.error(f"Error saving call transcript: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
     def disconnect(self, connection_id: str):
         """Remove WebSocket connection"""
         if connection_id in self.active_connections:
             del self.active_connections[connection_id]
-            
+
         if connection_id in self.conversation_history:
             del self.conversation_history[connection_id]
-            
+
         if connection_id in self.stream_metadata:
             del self.stream_metadata[connection_id]
-            
+
         if connection_id in self.call_states:
             del self.call_states[connection_id]
-            
+
         if connection_id in self.audio_buffers:
             del self.audio_buffers[connection_id]
-            
+
         if connection_id in self.processing_locks:
             del self.processing_locks[connection_id]
-            
+
         # Cancel silence timer if exists
         if connection_id in self.silence_timers:
             self.silence_timers[connection_id].cancel()
             del self.silence_timers[connection_id]
-            
+
         logger.info(f"WebSocket disconnected: {connection_id}")
     
     async def handle_incoming_message(self, websocket: WebSocket, message: str, connection_id: str):
@@ -845,6 +914,10 @@ class TelerWebSocketHandler:
             self.call_states[connection_id]['call_ended'] = True
             self.call_states[connection_id]['status'] = 'ended'
             logger.info(f"✅ Call state updated: call_ended={self.call_states[connection_id]['call_ended']}")
+
+        # Save call transcript to database and send to webhook
+        logger.info(f"💾 Saving call transcript for {connection_id}")
+        await self._save_call_transcript(connection_id)
 
         # Multi-language goodbye messages
         farewell_texts = {

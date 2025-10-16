@@ -22,6 +22,8 @@ from sarvam_service import sarvam_service
 from vad_processor import vad_processor
 from knowledge_base_routes import router as kb_router
 from rag_service import rag_service
+from database_service import database_service
+from webhook_service import webhook_service
 
 # Teler imports
 try:
@@ -510,6 +512,102 @@ async def debug_call_history():
         }
     }
 
+@app.get("/api/transcripts/{call_id}")
+async def get_transcript(call_id: str):
+    """Get call transcript by call_id from database."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    transcript = database_service.get_call_transcript(call_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    return {
+        'success': True,
+        'data': transcript
+    }
+
+@app.get("/api/transcripts")
+async def get_transcripts(limit: int = 50):
+    """Get recent call transcripts from database."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    transcripts = database_service.get_recent_transcripts(limit)
+    return {
+        'success': True,
+        'data': transcripts,
+        'count': len(transcripts)
+    }
+
+@app.get("/api/webhook/config")
+async def get_webhook_config():
+    """Get current webhook configuration."""
+    return {
+        'success': True,
+        'data': {
+            'webhook_url': webhook_service.get_webhook_url(),
+            'is_configured': webhook_service.is_configured()
+        }
+    }
+
+class WebhookConfigRequest(BaseModel):
+    webhook_url: str
+
+@app.post("/api/webhook/config")
+async def update_webhook_config(request: WebhookConfigRequest):
+    """Update webhook configuration."""
+    webhook_service.update_webhook_url(request.webhook_url)
+    return {
+        'success': True,
+        'message': 'Webhook configuration updated',
+        'data': {
+            'webhook_url': webhook_service.get_webhook_url(),
+            'is_configured': webhook_service.is_configured()
+        }
+    }
+
+@app.post("/api/webhook/retry/{call_id}")
+async def retry_webhook(call_id: str):
+    """Retry sending transcript to webhook for a specific call."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    if not webhook_service.is_configured():
+        raise HTTPException(status_code=400, detail="Webhook not configured")
+
+    transcript = database_service.get_call_transcript(call_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="Transcript not found")
+
+    success = await webhook_service.send_transcript(
+        call_id=call_id,
+        conversation=transcript.get('conversation', []),
+        metadata=transcript.get('metadata', {})
+    )
+
+    if success:
+        database_service.mark_webhook_sent(call_id)
+        return {
+            'success': True,
+            'message': 'Transcript sent to webhook successfully'
+        }
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send transcript to webhook")
+
+@app.get("/api/webhook/pending")
+async def get_pending_webhooks():
+    """Get transcripts pending webhook delivery."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    pending = database_service.get_pending_webhook_transcripts()
+    return {
+        'success': True,
+        'data': pending,
+        'count': len(pending)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv('PORT', 8000))
@@ -525,7 +623,11 @@ if __name__ == "__main__":
     logger.info(f"Sarvam AI available: {sarvam_service.is_available()}")
     logger.info(f"RAG Service available: {rag_service.is_available()}")
     logger.info(f"WebRTC VAD available: {vad_processor is not None}")
-    
+    logger.info(f"Database service available: {database_service.is_available()}")
+    logger.info(f"Webhook configured: {webhook_service.is_configured()}")
+    if webhook_service.is_configured():
+        logger.info(f"Webhook URL: {webhook_service.get_webhook_url()}")
+
     uvicorn.run(
         "fastapi_app:app",
         host="0.0.0.0",
