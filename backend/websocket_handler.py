@@ -200,7 +200,13 @@ class TelerWebSocketHandler:
         account_id = data.get("account_id")
         call_app_id = data.get("call_app_id")
 
+        # Extract phone numbers from the start message
+        # They can be in the root level or in the data object
+        from_number = data.get("from_number") or data.get("data", {}).get("from_number") or data.get("from")
+        to_number = data.get("to_number") or data.get("data", {}).get("to_number") or data.get("to")
+
         logger.info(f"🔍 Extracted IDs - call_id: {call_id}, stream_id: {stream_id}, account_id: {account_id}, call_app_id: {call_app_id}")
+        logger.info(f"📞 Extracted Numbers - from_number: {from_number}, to_number: {to_number}")
 
         # Store stream metadata
         self.stream_metadata[connection_id] = {
@@ -208,6 +214,8 @@ class TelerWebSocketHandler:
             "call_app_id": call_app_id,
             "call_id": call_id,
             "stream_id": stream_id,
+            "from_number": from_number,
+            "to_number": to_number,
             "encoding": data.get("data", {}).get("encoding", "audio/l16"),
             "sample_rate": data.get("data", {}).get("sample_rate", 8000),
             "channels": data.get("data", {}).get("channels", 1),
