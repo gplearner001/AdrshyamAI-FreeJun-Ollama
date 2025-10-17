@@ -418,7 +418,8 @@ async def handle_media_stream(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
     finally:
         if connection_id:
-            websocket_handler.disconnect(connection_id)
+            # Save call transcript before disconnecting
+            await websocket_handler.handle_disconnect(connection_id)
 
 # Additional WebSocket control endpoints
 @app.post("/api/websocket/interrupt/{connection_id}")

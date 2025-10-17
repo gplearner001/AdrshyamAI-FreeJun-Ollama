@@ -74,6 +74,24 @@ class TelerWebSocketHandler:
                 logger.info(f"No conversation history to save for {connection_id}")
                 return
 
+            # Get disconnect reason
+            disconnect_reason = call_state.get('disconnect_reason', 'unknown')
+
+            # Add disconnect reason to conversation history
+            if disconnect_reason == 'user_disconnected':
+                conversation.append({
+                    "role": "system",
+                    "content": "User disconnected the call"
+                })
+                logger.info(f"📝 Added disconnect reason to transcript: user_disconnected")
+            elif disconnect_reason in ['user_request', 'inactivity']:
+                disconnect_message = "User requested to end the call" if disconnect_reason == 'user_request' else "Call ended due to inactivity"
+                conversation.append({
+                    "role": "system",
+                    "content": disconnect_message
+                })
+                logger.info(f"📝 Added disconnect reason to transcript: {disconnect_reason}")
+
             call_id = stream_metadata.get('call_id', connection_id)
 
             # Try to get from_number and to_number from stream_metadata first
@@ -101,7 +119,8 @@ class TelerWebSocketHandler:
                 'end_time': datetime.now().isoformat(),
                 'connection_id': connection_id,
                 'from_number': from_number,
-                'to_number': to_number
+                'to_number': to_number,
+                'disconnect_reason': disconnect_reason
             }
 
             logger.info(f"Saving call transcript for call_id: {call_id} (from: {from_number}, to: {to_number})")
@@ -154,6 +173,34 @@ class TelerWebSocketHandler:
             logger.error(f"Error saving call transcript: {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+    async def handle_disconnect(self, connection_id: str):
+        """
+        Handle WebSocket disconnection gracefully.
+        Saves call transcript and sends to webhook before cleanup.
+        """
+        logger.info(f"🔌 Handling disconnect for connection: {connection_id}")
+
+        # Check if call has already been ended gracefully
+        call_state = self.call_states.get(connection_id, {})
+        call_already_ended = call_state.get('call_ended', False)
+
+        if call_already_ended:
+            logger.info(f"✅ Call already ended gracefully for {connection_id}, skipping transcript save")
+        else:
+            # Call was not ended gracefully (user disconnected), save transcript
+            logger.info(f"💾 User disconnected without ending call, saving transcript for {connection_id}")
+
+            # Mark the disconnection reason in call state
+            if connection_id in self.call_states:
+                self.call_states[connection_id]['disconnect_reason'] = 'user_disconnected'
+                self.call_states[connection_id]['call_ended'] = True
+                self.call_states[connection_id]['status'] = 'disconnected'
+
+            await self._save_call_transcript(connection_id)
+
+        # Now perform cleanup
+        self.disconnect(connection_id)
 
     def disconnect(self, connection_id: str):
         """Remove WebSocket connection"""
@@ -946,7 +993,8 @@ class TelerWebSocketHandler:
         if connection_id in self.call_states:
             self.call_states[connection_id]['call_ended'] = True
             self.call_states[connection_id]['status'] = 'ended'
-            logger.info(f"✅ Call state updated: call_ended={self.call_states[connection_id]['call_ended']}")
+            self.call_states[connection_id]['disconnect_reason'] = reason
+            logger.info(f"✅ Call state updated: call_ended={self.call_states[connection_id]['call_ended']}, reason={reason}")
 
         # Save call transcript to database and send to webhook
         logger.info(f"💾 Saving call transcript for {connection_id}")
