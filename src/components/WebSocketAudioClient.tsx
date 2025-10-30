@@ -156,10 +156,13 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
         try {
           const message = JSON.parse(event.data);
           console.log('📨 Received message type:', message.type);
-          
-          if (message.type === 'audio' && message.data?.audio_b64) {
-            console.log('🔊 Received audio response, playing...');
-            playAudioResponse(message.data.audio_b64);
+
+          if (message.type === 'audio') {
+            const audioData = message.audio_b64 || message.data?.audio_b64;
+            if (audioData) {
+              console.log('🔊 Received audio response, playing...');
+              playAudioResponse(audioData);
+            }
           }
         } catch (error) {
           console.error('❌ Error parsing WebSocket message:', error);
