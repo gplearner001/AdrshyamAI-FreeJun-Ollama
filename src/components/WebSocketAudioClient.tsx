@@ -47,6 +47,7 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
   const [streamInfo, setStreamInfo] = useState<any>(null);
   const [currentStreamId, setCurrentStreamId] = useState<string>('');
@@ -160,12 +161,14 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
           if (message.type === 'audio') {
             const audioData = message.audio_b64 || message.data?.audio_b64;
             if (audioData) {
-              console.log('🔊 Received audio response, playing...');
+              console.log('🔊 Received TTS audio response from backend, playing...');
+              setIsProcessing(false);
               playAudioResponse(audioData);
             }
           }
         } catch (error) {
           console.error('❌ Error parsing WebSocket message:', error);
+          setIsProcessing(false);
         }
       };
       
@@ -381,6 +384,10 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
       
       // Increment message ID for next message
       setMessageIdCounter(prev => prev + 1);
+
+      // Set processing state - waiting for AI response
+      setIsProcessing(true);
+      console.log('⏳ Speech processing started - waiting for AI response...');
       
     } catch (error) {
       console.error('❌ Error processing recorded audio:', error);
@@ -515,8 +522,9 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
 
   const playAudioResponse = async (audioBase64: string) => {
     try {
+      console.log('🔊 Playing TTS audio response, length:', audioBase64.length);
       setIsPlaying(true);
-      console.log('🔊 Playing audio response, length:', audioBase64.length);
+      setIsProcessing(false);
       
       // Create audio blob from base64
       const audioData = atob(audioBase64);
@@ -542,6 +550,7 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
       audio.onerror = (error) => {
         console.error('❌ Audio playback error:', error);
         setIsPlaying(false);
+        setIsProcessing(false);
         URL.revokeObjectURL(audioUrl);
         playingAudioRef.current = null;
       };
@@ -551,6 +560,7 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
     } catch (error) {
       console.error('❌ Failed to play audio response:', error);
       setIsPlaying(false);
+      setIsProcessing(false);
     }
   };
 
@@ -679,8 +689,9 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
           <div className="text-xs text-gray-500 space-y-1">
             <p>🔗 WebSocket: Connected to {WS_URL}</p>
             <p>📡 Stream ID: {currentStreamId}</p>
-            <p>🎤 Microphone: {isRecording ? 'Recording → 16-bit PCM @ 8kHz (auto-stops after 3s)' : 'Idle'}</p>
-            <p>🔊 Audio: {isPlaying ? 'Playing response' : 'Ready'}</p>
+            <p>�� Microphone: {isRecording ? 'Recording → 16-bit PCM @ 8kHz (auto-stops after 3s)' : 'Idle'}</p>
+            <p>⏳ Processing: {isProcessing ? 'Converting speech & generating AI response...' : 'Ready'}</p>
+            <p>🔊 Audio: {isPlaying ? 'Playing TTS response' : 'Ready'}</p>
             <p>📊 Message ID: {messageIdCounter}</p>
             <p>📦 Recorded Chunks: {recordedChunks.length}</p>
             <p>🎵 Format: 16-bit PCM, Mono, 8000 Hz</p>
@@ -818,11 +829,22 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
               {isRecording ? 'Recording...' : 'Mic Off'}
             </span>
           </div>
-          
+
+          <div className={`flex items-center gap-2 ${isProcessing ? 'text-yellow-600' : 'text-gray-400'}`}>
+            {isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+                <span className="text-sm font-medium">Processing Speech...</span>
+              </>
+            ) : (
+              <span className="text-sm font-medium text-gray-400">Ready</span>
+            )}
+          </div>
+
           <div className={`flex items-center gap-2 ${isPlaying ? 'text-blue-600' : 'text-gray-400'}`}>
             {isPlaying ? <Volume2 className="w-5 h-5 animate-pulse" /> : <VolumeX className="w-5 h-5" />}
             <span className="text-sm font-medium">
-              {isPlaying ? 'Playing...' : 'Audio Off'}
+              {isPlaying ? 'Playing TTS...' : 'Audio Off'}
             </span>
           </div>
         </div>
