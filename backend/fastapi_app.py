@@ -21,6 +21,7 @@ from ollama_service import ollama_service
 from sarvam_service import sarvam_service
 from vad_processor import vad_processor
 from knowledge_base_routes import router as kb_router
+from conversational_prompt_routes import router as prompt_router
 from rag_service import rag_service
 from database_service import database_service
 from webhook_service import webhook_service
@@ -52,6 +53,7 @@ app.add_middleware(
 
 # Include knowledge base router
 app.include_router(kb_router)
+app.include_router(prompt_router)
 
 # Configuration
 TELER_API_KEY = os.getenv('TELER_API_KEY', 'cf771fc46a1fddb7939efa742801de98e48b0826be4d8b9976d3c7374a02368b')

@@ -163,11 +163,7 @@ class OllamaService:
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens
-                }
+                "stream": False
             }
 
             response = requests.post(

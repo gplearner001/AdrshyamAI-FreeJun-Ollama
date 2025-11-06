@@ -7,6 +7,7 @@ import { AIStatusIndicator } from './components/AIStatusIndicator';
 import { AIConversationPanel } from './components/AIConversationPanel';
 import { WebSocketAudioClient } from './components/WebSocketAudioClient';
 import { KnowledgeBaseManager } from './components/KnowledgeBaseManager';
+import { ConversationalPromptManager } from './components/ConversationalPromptManager';
 
 function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -51,6 +52,10 @@ function App() {
 
         <div className="mb-8">
           <KnowledgeBaseManager />
+        </div>
+
+        <div className="mb-8">
+          <ConversationalPromptManager />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
