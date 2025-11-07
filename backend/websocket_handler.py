@@ -608,7 +608,7 @@ class TelerWebSocketHandler:
 
         # Greeting text based on language
         if current_language == 'en-IN':
-            greeting_text = "Hello! I am here to help you. Please tell me how I can assist you?"
+            greeting_text = "Hello Sir"
         else:
             greeting_text = "नमस्ते! मैं आपकी सहायता के लिए यहाँ हूँ। कृपया बताएं कि मैं आपकी कैसे मदद कर सकती हूँ?"
 

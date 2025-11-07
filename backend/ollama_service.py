@@ -8,6 +8,8 @@ import os
 import json
 import logging
 import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
@@ -22,87 +24,93 @@ class OllamaService:
         self.api_url = os.getenv('OLLAMA_API_URL', 'http://localhost:11434')
         self.model = os.getenv('OLLAMA_MODEL', 'llama3.2')
         self.available = False
+        self.database_url = os.getenv('DATABASE_URL')
 
         logger.info(f"Ollama API URL: {self.api_url}")
         logger.info(f"Ollama Model: {self.model}")
 
-        # Test connection to Ollama
         self._test_connection()
 
+    # -------------------------------------------------------
+    # 🧩 Fetch active conversational prompt from PostgreSQL
+    # -------------------------------------------------------
+    def _get_active_conversational_prompt(self, user_id: Optional[str] = None) -> Optional[str]:
+        """Fetch active system prompt from PostgreSQL."""
+        if not self.database_url:
+            logger.warning("DATABASE_URL not configured for OllamaService")
+            return None
+
+        try:
+            conn = psycopg2.connect(self.database_url)
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            if user_id:
+                cur.execute("""
+                    SELECT system_prompt FROM conversational_prompts
+                    WHERE is_active = true AND user_id = %s
+                    LIMIT 1
+                """, (user_id,))
+            else:
+                cur.execute("""
+                    SELECT system_prompt FROM conversational_prompts
+                    WHERE is_active = true
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                """)
+
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if row and row.get("system_prompt"):
+                logger.info("✅ Active conversational prompt loaded from database")
+                return row["system_prompt"]
+
+            logger.info("ℹ️ No active conversational prompt found in database")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching active conversational prompt: {e}")
+            return None
+
+    # -------------------------------------------------------
+    # 🧪 Test Ollama Cloud Connection
+    # -------------------------------------------------------
     def _test_connection(self):
         """Test connection to Ollama Cloud API."""
         try:
-            # Test with a simple chat completion request
             headers = {
                 'Content-Type': 'application/json',
                 'Authorization': f'Bearer {os.getenv("OLLAMA_API_KEY", "")}'
             }
-
             payload = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": "test"}],
                 "stream": False
             }
-
             response = requests.post(
                 f"{self.api_url}/api/chat",
                 json=payload,
                 headers=headers,
                 timeout=10
             )
-
             if response.status_code == 200:
                 self.available = True
-                logger.info(f"Ollama Cloud service initialized successfully with model: {self.model}")
+                logger.info(f"Ollama service initialized successfully with model: {self.model}")
             else:
-                logger.warning(f"Ollama Cloud API returned status code: {response.status_code}")
-                logger.warning(f"Response: {response.text}")
+                logger.warning(f"Ollama API returned status code: {response.status_code}")
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Failed to connect to Ollama Cloud API at {self.api_url}: {str(e)}")
-            logger.info("Make sure your Ollama Cloud endpoint is accessible")
+            logger.warning(f"Failed to connect to Ollama API at {self.api_url}: {str(e)}")
 
     def is_available(self) -> bool:
         """Check if Ollama service is available."""
         return self.available
 
-    async def generate_call_flow(self, call_context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generate a dynamic call flow based on call context using Ollama.
-
-        Args:
-            call_context: Dictionary containing call information
-
-        Returns:
-            Dictionary containing the generated call flow
-        """
-        if not self.is_available():
-            return self._get_conversation_flow()
-
-        try:
-            prompt = self._build_flow_generation_prompt(call_context)
-
-            response = self._generate_completion(prompt, temperature=0.3, max_tokens=1000)
-
-            # Parse Ollama's response to extract call flow
-            flow_config = self._parse_flow_response(response)
-            logger.info(f"Generated call flow using Ollama: {flow_config}")
-
-            return flow_config
-
-        except Exception as e:
-            logger.error(f"Error generating call flow with Ollama: {str(e)}")
-            return self._get_conversation_flow()
-
+    # -------------------------------------------------------
+    # 🧠 Generate conversation response
+    # -------------------------------------------------------
     async def generate_conversation_response(self, conversation_context: Dict[str, Any]) -> str:
-        """
-        Generate a conversation response using Ollama.
-
-        Args:
-            conversation_context: Dictionary containing conversation history and context
-
-        Returns:
-            Generated response text
-        """
+        """Generate conversation response using Ollama."""
         if not self.is_available():
             return "Hello! How can I help you today?"
 
@@ -112,60 +120,45 @@ class OllamaService:
             knowledge_base_context = ""
             knowledge_base_id = conversation_context.get('knowledge_base_id')
             current_input = conversation_context.get('current_input', '')
+            user_id = conversation_context.get('user_id')
 
-            logger.info(f"🔍 KB Lookup - ID: {knowledge_base_id}, Query: '{current_input}', RAG Available: {rag_service.is_available()}")
+            # ✅ Fetch active conversational prompt
+            active_prompt = self._get_active_conversational_prompt(user_id=user_id)
 
+            # Optional RAG (Knowledge Base) context
             if knowledge_base_id and current_input and rag_service.is_available():
-                logger.info(f"📚 Querying knowledge base: {knowledge_base_id} with query: '{current_input}'")
                 knowledge_base_context = await rag_service.get_context_for_query(
                     query=current_input,
                     knowledge_base_id=knowledge_base_id,
                     max_tokens=2000
                 )
-                logger.info(f"✓ Retrieved context length: {len(knowledge_base_context)} chars")
-                if knowledge_base_context:
-                    logger.info(f"📝 Context preview: {knowledge_base_context[:200]}...")
-                else:
-                    logger.warning("⚠️ Knowledge base returned empty context")
-            else:
-                logger.warning(f"⚠️ Skipping KB query - ID: {knowledge_base_id}, Query: {bool(current_input)}, RAG: {rag_service.is_available()}")
 
-            prompt = self._build_conversation_prompt(conversation_context, knowledge_base_context)
+            # Build conversation prompt (with fallback)
+            prompt = self._build_conversation_prompt(conversation_context, knowledge_base_context, active_prompt)
 
+            # Generate completion
             response = self._generate_completion(prompt, temperature=0.7, max_tokens=500)
-
-            return response.strip()
+            return response.strip() if response else "I'm here. Please continue."
 
         except Exception as e:
-            logger.error(f"Error generating conversation response with Ollama: {str(e)}")
+            logger.error(f"Error generating conversation response: {str(e)}")
             return "I apologize, but I'm having trouble processing your request right now."
 
+    # -------------------------------------------------------
+    # 🔧 Generate completion (send to Ollama)
+    # -------------------------------------------------------
     def _generate_completion(self, prompt: str, temperature: float = 0.7, max_tokens: int = 500) -> str:
-        """
-        Generate completion using Ollama Cloud API.
-
-        Args:
-            prompt: The prompt to send to Ollama
-            temperature: Temperature for generation
-            max_tokens: Maximum tokens to generate
-
-        Returns:
-            Generated text response
-        """
+        """Generate completion using Ollama."""
         try:
             headers = {
                 'Content-Type': 'application/json',
                 'Authorization': f'Bearer {os.getenv("OLLAMA_API_KEY", "")}'
             }
-
             payload = {
                 "model": self.model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
+                "messages": [{"role": "user", "content": prompt}],
                 "stream": False
             }
-
             response = requests.post(
                 f"{self.api_url}/api/chat",
                 json=payload,
@@ -178,47 +171,26 @@ class OllamaService:
                 message = result.get('message', {})
                 return message.get('content', '')
             else:
-                logger.error(f"Ollama Cloud API error: {response.status_code} - {response.text}")
+                logger.error(f"Ollama API error {response.status_code}: {response.text}")
                 return ""
 
         except Exception as e:
-            logger.error(f"Error calling Ollama Cloud API: {str(e)}")
+            logger.error(f"Error calling Ollama API: {e}")
             return ""
 
-    def _build_flow_generation_prompt(self, call_context: Dict[str, Any]) -> str:
-        """Build prompt for call flow generation."""
-        return f"""Generate a call flow configuration for a CONVERSATIONAL voice call with the following context:
-
-From: {call_context.get('from_number', 'Unknown')}
-To: {call_context.get('to_number', 'Unknown')}
-Purpose: {call_context.get('purpose', 'General call')}
-
-IMPORTANT: This call flow must enable REAL PHONE CONVERSATION between two people.
-The call should NOT end automatically after answering. It should:
-
-1. Answer the call automatically
-2. Play a brief greeting (max 5 seconds)
-3. Enable bidirectional conversation mode
-4. Keep the call active for actual human-to-human conversation
-5. Only end when explicitly requested or after long silence
-
-Please provide a JSON configuration that includes:
-1. Call answering and greeting
-2. Continuous conversation mode (not just listen/respond cycles)
-3. Proper call termination handling
-4. Recording and audio quality settings
-5. Silence detection and handling
-
-Format the response as a valid JSON object that can be used for call flow configuration.
-Focus on enabling REAL PHONE CONVERSATION, not automated responses.
-"""
-
-    def _build_conversation_prompt(self, conversation_context: Dict[str, Any], knowledge_base_context: str = "") -> str:
-        """Build prompt for conversation response generation."""
+    # -------------------------------------------------------
+    # 🧱 Build conversation prompt (DB + fallback)
+    # -------------------------------------------------------
+    def _build_conversation_prompt(
+        self,
+        conversation_context: Dict[str, Any],
+        knowledge_base_context: str = "",
+        db_system_prompt: Optional[str] = None
+    ) -> str:
+        """Build conversation prompt (use DB prompt if available)."""
         history = conversation_context.get('history', [])
         current_input = conversation_context.get('current_input', '')
         context = conversation_context.get('context', {})
-
         language = context.get('language', 'en-IN')
         language_name = self._get_language_name(language)
 
@@ -227,24 +199,25 @@ Focus on enabling REAL PHONE CONVERSATION, not automated responses.
         kb_instructions = ""
         if knowledge_base_context:
             kb_instructions = f"""
-
 CRITICAL - KNOWLEDGE BASE CONTEXT:
-You MUST use the following information from the knowledge base to answer questions.
-This is the PRIMARY source of truth for all responses.
-
---- KNOWLEDGE BASE START ---
 {knowledge_base_context}
---- KNOWLEDGE BASE END ---
-
-MANDATORY RULES:
-1. ALWAYS prioritize information from the knowledge base above
-2. Answer questions ONLY using the knowledge base context provided
-3. If the exact answer is not in the context, say: "I don't have that specific information in my knowledge base."
-4. DO NOT use general knowledge or assumptions - ONLY use the knowledge base content
-5. Be direct and specific - cite relevant information from the knowledge base
-6. Keep responses SHORT (1-2 sentences) but accurate
 """
 
+        # ✅ Use DB system prompt if available
+        if db_system_prompt:
+            logger.info("💬 Using active conversational prompt from database")
+            return f"""{db_system_prompt}
+
+{kb_instructions}
+
+Conversation history:
+{history_text}
+
+Current user input: {current_input}
+"""
+
+        # 🔁 Fallback to built-in prompt
+        logger.info("⚙️ Using default built-in conversational prompt (no active DB prompt found)")
         return f"""You are an AI assistant in a voice call conversation in {language_name}.
 
 IMPORTANT CONVERSATION RULES:
@@ -267,29 +240,9 @@ Provide a SHORT, helpful response that continues the conversation naturally.
 Remember: This is a voice call - keep it brief and conversational!
 """
 
-    def _parse_flow_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse Ollama's response to extract call flow configuration."""
-        try:
-            # Try to extract JSON from the response
-            import re
-
-            # Look for JSON in the response
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                parsed_flow = json.loads(json_match.group())
-                # Ensure the flow supports conversation
-                if 'conversation_mode' not in parsed_flow:
-                    parsed_flow['conversation_mode'] = 'bidirectional'
-                if 'keep_alive' not in parsed_flow:
-                    parsed_flow['keep_alive'] = True
-                return parsed_flow
-            else:
-                # If no JSON found, use conversation flow
-                return self._get_conversation_flow()
-        except Exception as e:
-            logger.error(f"Error parsing Ollama response: {str(e)}")
-            return self._get_conversation_flow()
-
+    # -------------------------------------------------------
+    # 🧩 Default conversation/call flow configs (unchanged)
+    # -------------------------------------------------------
     def _get_default_flow(self) -> Dict[str, Any]:
         """Get default call flow configuration."""
         return {
@@ -299,18 +252,9 @@ Remember: This is a voice call - keep it brief and conversational!
             "chunk_size": 500,
             "record": True,
             "steps": [
-                {
-                    "action": "speak",
-                    "text": "Hello! Thank you for calling. How can I assist you today?"
-                },
-                {
-                    "action": "listen",
-                    "timeout": 30
-                },
-                {
-                    "action": "respond",
-                    "type": "dynamic"
-                }
+                {"action": "speak", "text": "Hello! Thank you for calling. How can I assist you today?"},
+                {"action": "listen", "timeout": 30},
+                {"action": "respond", "type": "dynamic"}
             ]
         }
 
@@ -321,58 +265,22 @@ Remember: This is a voice call - keep it brief and conversational!
             "initial_message": "Hello! You're now connected. Please go ahead and speak.",
             "conversation_mode": "bidirectional",
             "keep_alive": True,
-            "max_duration": 1800,  # 30 minutes max
-            "silence_timeout": 10,  # 10 seconds of silence before prompting
+            "max_duration": 1800,
+            "silence_timeout": 10,
             "end_call_phrases": ["goodbye", "end call", "hang up", "bye bye"],
             "steps": [
-                {
-                    "action": "answer_call",
-                    "auto_answer": True
-                },
-                {
-                    "action": "play_greeting",
-                    "text": "Hello! You're now connected. Please go ahead and speak.",
-                    "voice": "natural"
-                },
-                {
-                    "action": "start_conversation",
-                    "mode": "continuous",
-                    "enable_interruption": True,
-                    "record_conversation": True
-                },
-                {
-                    "action": "monitor_silence",
-                    "timeout": 10,
-                    "prompt_text": "Are you still there? Please continue speaking."
-                },
-                {
-                    "action": "end_call_detection",
-                    "phrases": ["goodbye", "end call", "hang up", "bye bye"],
-                    "farewell_message": "Thank you for calling. Have a great day!"
-                }
+                {"action": "answer_call", "auto_answer": True},
+                {"action": "play_greeting", "text": "Hello! You're now connected. Please go ahead and speak.", "voice": "natural"},
+                {"action": "start_conversation", "mode": "continuous", "enable_interruption": True, "record_conversation": True},
+                {"action": "monitor_silence", "timeout": 10, "prompt_text": "Are you still there? Please continue speaking."},
+                {"action": "end_call_detection", "phrases": ["goodbye", "end call", "hang up", "bye bye"], "farewell_message": "Thank you for calling. Have a great day!"}
             ],
-            "recording": {
-                "enabled": True,
-                "format": "wav",
-                "quality": "high"
-            },
-            "audio_settings": {
-                "echo_cancellation": True,
-                "noise_reduction": True,
-                "auto_gain_control": True
-            }
+            "recording": {"enabled": True, "format": "wav", "quality": "high"},
+            "audio_settings": {"echo_cancellation": True, "noise_reduction": True, "auto_gain_control": True}
         }
 
     def _get_language_name(self, language_code: str) -> str:
-        """
-        Get human-readable language name from language code.
-
-        Args:
-            language_code: Language code (e.g., 'en-IN', 'hi-IN')
-
-        Returns:
-            Human-readable language name
-        """
+        """Get human-readable language name."""
         language_names = {
             'en-IN': 'English',
             'hi-IN': 'Hindi',
@@ -388,5 +296,7 @@ Remember: This is a voice call - keep it brief and conversational!
         }
         return language_names.get(language_code, 'Hindi/English mixed')
 
-# Global instance
+# -------------------------------------------------------
+# 🌍 Global instance
+# -------------------------------------------------------
 ollama_service = OllamaService()
