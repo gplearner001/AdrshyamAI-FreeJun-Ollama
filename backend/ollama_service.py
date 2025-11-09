@@ -157,7 +157,8 @@ class OllamaService:
             payload = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
-                "stream": False
+                "stream": False,
+                "keep_alive": -1
             }
             response = requests.post(
                 f"{self.api_url}/api/chat",
