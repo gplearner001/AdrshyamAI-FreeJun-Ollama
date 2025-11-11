@@ -616,33 +616,33 @@ class TelerWebSocketHandler:
         speaker = self._get_speaker_for_language(current_language)
 
         # Generate greeting audio using Sarvam AI TTS
-        greeting_audio = await sarvam_service.text_to_speech(
-            text=greeting_text,
-            language=current_language,
-            speaker=speaker
-        )
+        # greeting_audio = await sarvam_service.text_to_speech(
+        #     text=greeting_text,
+        #     language=current_language,
+        #     speaker=speaker
+        # )
         
-        if greeting_audio:
-            greeting_message = {
-                "type": "audio",
-                "audio_b64": greeting_audio,
-                "chunk_id": self.chunk_counter
-            }
+        # if greeting_audio:
+        #     greeting_message = {
+        #         "type": "audio",
+        #         "audio_b64": greeting_audio,
+        #         "chunk_id": self.chunk_counter
+        #     }
             
-            self.chunk_counter += 1
+        #     self.chunk_counter += 1
             
-            try:
-                await websocket.send_text(json.dumps(greeting_message))
-                logger.info(f"✅ Sent greeting to connection {connection_id}")
+        #     try:
+        #         await websocket.send_text(json.dumps(greeting_message))
+        #         logger.info(f"✅ Sent greeting to connection {connection_id}")
                 
-                # Update call state
-                if connection_id in self.call_states:
-                    self.call_states[connection_id]['last_ai_response'] = datetime.now()
+        #         # Update call state
+        #         if connection_id in self.call_states:
+        #             self.call_states[connection_id]['last_ai_response'] = datetime.now()
                     
-            except Exception as e:
-                logger.error(f"Failed to send greeting: {e}")
-        else:
-            logger.warning("Failed to generate greeting audio with Sarvam AI")
+        #     except Exception as e:
+        #         logger.error(f"Failed to send greeting: {e}")
+        # else:
+        #     logger.warning("Failed to generate greeting audio with Sarvam AI")
     
     def _convert_audio_format(self, audio_b64: str) -> str:
         """Convert Teler audio format to format suitable for Sarvam AI"""
