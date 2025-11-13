@@ -23,12 +23,14 @@ router = APIRouter(prefix="/api/prompts", tags=["conversational_prompts"])
 
 class ConversationalPromptCreate(BaseModel):
     name: str
+    greeting_message: Optional[str] = None
     system_prompt: str
     user_id: str
     is_active: bool = False
 
 class ConversationalPromptUpdate(BaseModel):
     name: Optional[str] = None
+    greeting_message: Optional[str] = None
     system_prompt: Optional[str] = None
 
 class PromptService:
@@ -67,6 +69,7 @@ class PromptService:
                     CREATE TABLE IF NOT EXISTS conversational_prompts (
                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         name TEXT NOT NULL,
+                        greeting_message TEXT NOT NULL,
                         system_prompt TEXT NOT NULL,
                         user_id TEXT NOT NULL,
                         is_active BOOLEAN DEFAULT false,
@@ -124,10 +127,10 @@ async def create_prompt(prompt: ConversationalPromptCreate):
             """, (prompt.user_id,))
 
         cur.execute("""
-            INSERT INTO conversational_prompts (name, system_prompt, user_id, is_active)
-            VALUES (%s, %s, %s, %s)
-            RETURNING id, name, system_prompt, user_id, is_active, created_at, updated_at
-        """, (prompt.name, prompt.system_prompt, prompt.user_id, prompt.is_active))
+            INSERT INTO conversational_prompts (name, greeting_message, system_prompt, user_id, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, name, greeting_message, system_prompt, user_id, is_active, created_at, updated_at
+        """, (prompt.name, prompt.greeting_message, prompt.system_prompt, prompt.user_id, prompt.is_active))
 
         created_prompt = cur.fetchone()
         conn.commit()
@@ -169,7 +172,7 @@ async def get_prompts(user_id: str):
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         cur.execute("""
-            SELECT id, name, system_prompt, user_id, is_active, created_at, updated_at
+            SELECT id, name, greeting_message, system_prompt, user_id, is_active, created_at, updated_at
             FROM conversational_prompts
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -211,6 +214,10 @@ async def update_prompt(prompt_id: str, update_data: ConversationalPromptUpdate)
             update_fields.append("name = %s")
             params.append(update_data.name)
 
+        if update_data.greeting_message is not None:
+            update_fields.append("greeting_message = %s")
+            params.append(update_data.greeting_message)
+
         if update_data.system_prompt is not None:
             update_fields.append("system_prompt = %s")
             params.append(update_data.system_prompt)
@@ -228,7 +235,7 @@ async def update_prompt(prompt_id: str, update_data: ConversationalPromptUpdate)
             UPDATE conversational_prompts
             SET {', '.join(update_fields)}
             WHERE id = %s
-            RETURNING id, name, system_prompt, user_id, is_active, created_at, updated_at
+            RETURNING id, name,greeting_message, system_prompt, user_id, is_active, created_at, updated_at
         """
 
         cur.execute(query, params)
@@ -300,7 +307,7 @@ async def activate_prompt(prompt_id: str):
             UPDATE conversational_prompts
             SET is_active = true, updated_at = NOW()
             WHERE id = %s
-            RETURNING id, name, system_prompt, user_id, is_active, created_at, updated_at
+            RETURNING id, name, greeting_message, system_prompt, user_id, is_active, created_at, updated_at
         """, (prompt_id,))
 
         activated_prompt = cur.fetchone()

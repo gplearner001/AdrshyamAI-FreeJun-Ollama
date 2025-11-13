@@ -23,6 +23,7 @@ interface RecordedChunk {
 
 interface StartMessage {
   type: 'start';
+  user_id:'demo-user-123';
   account_id: string;
   call_app_id: string;
   call_id: string;
@@ -128,6 +129,7 @@ export const WebSocketAudioClient: React.FC<WebSocketAudioClientProps> = ({
         // Send start message to simulate Teler's start message
         const startMessage: StartMessage = {
           type: 'start',
+          user_id:'demo-user-123',
           account_id: 'test-account-id',
           call_app_id: 'test-app-id',
           call_id: callId,

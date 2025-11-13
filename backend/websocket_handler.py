@@ -18,6 +18,9 @@ from ollama_service import ollama_service
 from vad_processor import vad_processor
 from database_service import database_service
 from webhook_service import webhook_service
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,8 @@ class TelerWebSocketHandler:
         self.silence_timers: Dict[str, asyncio.Task] = {}
         self.audio_buffers: Dict[str, list] = {}  # Buffer audio chunks
         self.processing_locks: Dict[str, asyncio.Lock] = {}  # Prevent concurrent processing
+        self.database_url = os.getenv('DATABASE_URL')
+        self.connection = None
         
     async def connect(self, websocket: WebSocket, stream_id: str = None):
         """Accept WebSocket connection and store it"""
@@ -244,6 +249,7 @@ class TelerWebSocketHandler:
                 logger.debug(f"Ignoring message for ended call: {connection_id}")
                 return
                 
+            logger.info(f"connection_id type: {type(connection_id)}, value: {connection_id}")
             data = json.loads(message)
             message_type = data.get("type")
             
@@ -271,6 +277,7 @@ class TelerWebSocketHandler:
         stream_id = data.get("stream_id")
         account_id = data.get("account_id")
         call_app_id = data.get("call_app_id")
+        user_id = data.get("user_id")  # New field for greeting message lookup
 
         # Extract phone numbers from the start message
         # They can be in the root level or in the data object
@@ -283,6 +290,7 @@ class TelerWebSocketHandler:
         # Store stream metadata
         self.stream_metadata[connection_id] = {
             "account_id": account_id,
+            "user_id": user_id,
             "call_app_id": call_app_id,
             "call_id": call_id,
             "stream_id": stream_id,
@@ -311,7 +319,7 @@ class TelerWebSocketHandler:
         
         # Send initial greeting after a short delay
         await asyncio.sleep(1)  # Give time for connection to stabilize
-        await self._send_initial_greeting(connection_id)
+        await self._send_initial_greeting(connection_id, data)
         
         # Start silence monitoring
         await self._start_silence_monitoring(connection_id)
@@ -589,8 +597,48 @@ class TelerWebSocketHandler:
                 
         except Exception as e:
             logger.error(f"❌ Error generating and sending AI response: {e}")
+
+
+    def _get_active_greeting_for_user(self, user_id: Optional[str] = None) -> Optional[str]:
+        """Fetch active system prompt from PostgreSQL."""
+        if not self.database_url:
+            logger.warning("DATABASE_URL not configured for websocket handler")
+            return None
+
+        try:
+            conn = psycopg2.connect(self.database_url)
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            if user_id:
+                cur.execute("""
+                    SELECT greeting_message FROM conversational_prompts
+                    WHERE is_active = true AND user_id = %s
+                    LIMIT 1
+                """, (user_id,))
+            else:
+                cur.execute("""
+                    SELECT greeting_message FROM conversational_prompts
+                    WHERE is_active = true
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                """)
+
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if row and row.get("greeting_message"):
+                logger.info("✅ Active greeting_message loaded from database")
+                return row["greeting_message"]
+
+            logger.info("ℹ️ No active greeting_message found in database")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error fetching active conversational prompt: {e}")
+            return None
     
-    async def _send_initial_greeting(self, connection_id: str):
+    async def _send_initial_greeting(self, connection_id: str, start_data: Dict[str, Any] = {}):
         """Send initial greeting audio to the caller"""
         websocket = self.active_connections.get(connection_id)
         call_state = self.call_states.get(connection_id, {})
@@ -607,10 +655,37 @@ class TelerWebSocketHandler:
         current_language = self.call_states.get(connection_id, {}).get('current_language', 'en-IN')
 
         # Greeting text based on language
-        if current_language == 'en-IN':
-            greeting_text = "Hello Sir"
+        # --- DYNAMIC GREETING MESSAGE LOGIC ---
+        # 1. Define the hard-coded default greeting as a fallback.
+        default_greeting = "Hello! Welcome to the AdrshyamAI Help Center. How can I assist you today?"
+        greeting_text = default_greeting
+
+        # 2. Get user_id from the start message to fetch the personalized prompt.
+        # The frontend should pass this in the 'data' object of the 'start' message.
+        user_id = start_data.get("user_id")
+
+        if user_id:
+            print(f"Fetching active prompt for user_id: {user_id}")
+            try:
+                # 3. Fetch the active greeting from the PostgreSQL database.
+                # NOTE: This requires a new method in `DatabaseService` like `get_active_greeting_for_user`
+                # that executes a query similar to:
+                # SELECT greeting_message FROM prompts WHERE user_id = :user_id AND is_active = TRUE LIMIT 1
+                db_greeting = self._get_active_greeting_for_user(user_id)
+                
+                # 4. Use the database greeting if it's available and not empty.
+                if db_greeting:
+                    greeting_text = db_greeting
+                    print(f"Found custom greeting in DB: '{greeting_text}'")
+                else:
+                    print("No custom greeting found in DB, using default.")
+            except Exception as e:
+                print(f"Error fetching greeting from database: {e}. Using default greeting.")
         else:
-            greeting_text = "नमस्ते! मैं आपकी सहायता के लिए यहाँ हूँ। कृपया बताएं कि मैं आपकी कैसे मदद कर सकती हूँ?"
+            print("No user_id provided in start message, using default greeting.")
+        
+        print(f"Final greeting to be used: '{greeting_text}'")
+
 
         # Get appropriate speaker
         speaker = self._get_speaker_for_language(current_language)
