@@ -5,6 +5,7 @@ interface ConversationalPrompt {
   id: string;
   name: string;
   system_prompt: string;
+  greeting_message?: string;
   user_id: string;
   is_active: boolean;
   created_at: string;
@@ -21,6 +22,7 @@ export function ConversationalPromptManager() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<string>('');
   const [promptName, setPromptName] = useState('');
+  const [greetingMessage, setGreetingMessage] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const userId = 'demo-user-123';
@@ -43,6 +45,7 @@ export function ConversationalPromptManager() {
           setSelectedPrompt(activePrompt);
           setEditingPrompt(activePrompt.system_prompt);
           setPromptName(activePrompt.name);
+          setGreetingMessage(activePrompt.greeting_message || '');
         }
       }
     } catch (error) {
@@ -70,6 +73,7 @@ export function ConversationalPromptManager() {
         body: JSON.stringify({
           name: promptName,
           system_prompt: editingPrompt,
+          greeting_message: greetingMessage,
           user_id: userId,
           is_active: false
         })
@@ -81,6 +85,7 @@ export function ConversationalPromptManager() {
         setShowCreateForm(false);
         setPromptName('');
         setEditingPrompt('');
+        setGreetingMessage('');
         await fetchPrompts();
       } else {
         showMessage('error', data.error || 'Failed to create prompt');
@@ -109,7 +114,8 @@ export function ConversationalPromptManager() {
         },
         body: JSON.stringify({
           name: promptName,
-          system_prompt: editingPrompt
+          system_prompt: editingPrompt,
+          greeting_message: greetingMessage
         })
       });
 
@@ -172,6 +178,7 @@ export function ConversationalPromptManager() {
           setSelectedPrompt(null);
           setEditingPrompt('');
           setPromptName('');
+          setGreetingMessage('');
         }
         await fetchPrompts();
       } else {
@@ -187,6 +194,7 @@ export function ConversationalPromptManager() {
     setSelectedPrompt(prompt);
     setEditingPrompt(prompt.system_prompt);
     setPromptName(prompt.name);
+    setGreetingMessage(prompt.greeting_message || '');
     setShowCreateForm(false);
   };
 
@@ -199,9 +207,11 @@ export function ConversationalPromptManager() {
     setShowCreateForm(false);
     setPromptName('');
     setEditingPrompt('');
+    setGreetingMessage('');
     if (selectedPrompt) {
       setEditingPrompt(selectedPrompt.system_prompt);
       setPromptName(selectedPrompt.name);
+      setGreetingMessage(selectedPrompt.greeting_message || '');
     }
   };
 
@@ -237,6 +247,7 @@ Remember: This is a voice call - keep it brief and conversational!`;
             setSelectedPrompt(null);
             setEditingPrompt(defaultPromptTemplate);
             setPromptName('');
+            setGreetingMessage('');
           }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
@@ -355,13 +366,29 @@ Remember: This is a voice call - keep it brief and conversational!`;
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Greeting Message (optional)
+                </label>
+                <input
+                  type="text"
+                  value={greetingMessage}
+                  onChange={(e) => setGreetingMessage(e.target.value)}
+                  placeholder="e.g., Hello! How can I help you today?"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  The first message the AI sends to start the conversation.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   System Prompt
                 </label>
                 <textarea
                   value={editingPrompt}
                   onChange={(e) => setEditingPrompt(e.target.value)}
                   placeholder="Enter your conversational prompt here..."
-                  rows={15}
+                  rows={12}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                 />
                 <p className="text-xs text-gray-500 mt-1">

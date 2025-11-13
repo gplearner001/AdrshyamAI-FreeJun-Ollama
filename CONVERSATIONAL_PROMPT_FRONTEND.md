@@ -7,8 +7,8 @@ A complete frontend interface for managing conversational prompts that configure
 ## Features Implemented
 
 ### 1. Prompt Management UI
-- **Create New Prompts**: Users can create custom conversational prompts with names and system instructions
-- **Edit Existing Prompts**: Modify prompt content and names
+- **Create New Prompts**: Users can create custom conversational prompts with names, greeting messages, and system instructions
+- **Edit Existing Prompts**: Modify prompt content, names, and greeting messages
 - **Delete Prompts**: Remove unwanted prompts with confirmation
 - **Activate Prompts**: Set which prompt is currently active for conversations
 
@@ -24,6 +24,7 @@ A complete frontend interface for managing conversational prompts that configure
 - Large text area for editing system prompt content
 - Character and line counter
 - Name field for prompt identification
+- Greeting message text input
 - Save/Create/Reset buttons with loading states
 
 #### Status Messages
@@ -70,6 +71,7 @@ Create a new prompt
 Body: {
   name: string,
   system_prompt: string,
+  greeting_message: string,
   user_id: string,
   is_active: boolean
 }
@@ -84,7 +86,8 @@ Update an existing prompt
 ```
 Body: {
   name: string,
-  system_prompt: string
+  system_prompt: string,
+  greeting_message: string
 }
 Response: {
   success: boolean,
@@ -116,6 +119,7 @@ interface ConversationalPrompt {
   id: string;
   name: string;
   system_prompt: string;
+  greeting_message?: string;
   user_id: string;
   is_active: boolean;
   created_at: string;
@@ -130,6 +134,7 @@ CREATE TABLE conversational_prompts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     system_prompt TEXT NOT NULL,
+    greeting_message TEXT,
     user_id TEXT NOT NULL,
     is_active BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -154,13 +159,13 @@ WHERE is_active = true;
 
 1. **Creating a Prompt**:
    - Click "New Prompt" button
-   - Enter prompt name
+   - Enter prompt name and optional greeting message
    - Write or paste system prompt
    - Click "Create Prompt"
 
 2. **Editing a Prompt**:
    - Click on a prompt from the list
-   - Modify name or content
+   - Modify name, greeting, or content
    - Click "Save Changes"
 
 3. **Activating a Prompt**:
@@ -206,7 +211,7 @@ To make this functional, implement:
 1. PostgreSQL database table for conversational_prompts
 2. Backend API routes for CRUD operations
 3. Integration with conversation generation service
-4. Use active prompt in AI response generation
+4. Use active prompt and greeting message in AI response generation
 5. Add user authentication and associate prompts with users
 
 ## Files Modified
