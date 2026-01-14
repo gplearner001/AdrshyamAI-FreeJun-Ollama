@@ -8,6 +8,7 @@ import { AIConversationPanel } from './components/AIConversationPanel';
 import { WebSocketAudioClient } from './components/WebSocketAudioClient';
 import { KnowledgeBaseManager } from './components/KnowledgeBaseManager';
 import { ConversationalPromptManager } from './components/ConversationalPromptManager';
+import { AIConfigManager } from './components/AIConfigManager';
 
 function App() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -48,6 +49,10 @@ function App() {
               onKnowledgeBaseChange={handleKnowledgeBaseChange}
             />
           </div>
+        </div>
+
+        <div className="mb-8">
+          <AIConfigManager />
         </div>
 
         <div className="mb-8">

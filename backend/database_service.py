@@ -43,12 +43,13 @@ class DatabaseService:
             return False
 
     def _initialize_schema(self):
-        """Initialize database schema for call transcripts"""
+        """Initialize database schema for call transcripts and AI configurations"""
         if not self._ensure_connection():
             return
 
         try:
             with self.connection.cursor() as cursor:
+                # Call Transcripts Table
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS call_transcripts (
                         id SERIAL PRIMARY KEY,
@@ -75,6 +76,25 @@ class DatabaseService:
                     CREATE INDEX IF NOT EXISTS idx_created_at ON call_transcripts(created_at DESC);
                     CREATE INDEX IF NOT EXISTS idx_webhook_sent ON call_transcripts(webhook_sent);
                 """)
+
+                # AI Configurations Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ai_configurations (
+                        id SERIAL PRIMARY KEY,
+                        config_name TEXT UNIQUE NOT NULL DEFAULT 'default_ai_config',
+                        selected_llm_service TEXT NOT NULL DEFAULT 'ollama', -- 'ollama' or 'claude'
+                        ollama_model TEXT, -- specific ollama model to use, if different from .env
+                        claude_model TEXT, -- specific claude model to use, if different from .env
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        updated_at TIMESTAMPTZ DEFAULT now()
+                    );
+
+                    -- Ensure only one default config exists
+                    INSERT INTO ai_configurations (config_name, selected_llm_service)
+                    VALUES ('default_ai_config', 'ollama')
+                    ON CONFLICT (config_name) DO NOTHING;
+                """)
+
                 self.connection.commit()
                 logger.info("Database schema initialized successfully")
         except Exception as e:
@@ -288,6 +308,75 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Failed to retrieve recent transcripts: {e}")
             return []
+
+    def save_ai_config(
+        self,
+        selected_llm_service: str,
+        ollama_model: Optional[str] = None,
+        claude_model: Optional[str] = None,
+        config_name: str = 'default_ai_config'
+    ) -> bool:
+        """
+        Save or update AI configuration.
+
+        Args:
+            selected_llm_service: The currently selected LLM service ('ollama' or 'claude').
+            ollama_model: Optional override for Ollama model.
+            claude_model: Optional override for Claude model.
+            config_name: Name of the configuration (defaults to 'default_ai_config').
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not self._ensure_connection():
+            logger.warning("Database not available, skipping AI config save")
+            return False
+
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO ai_configurations (config_name, selected_llm_service, ollama_model, claude_model)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (config_name) DO UPDATE SET
+                        selected_llm_service = EXCLUDED.selected_llm_service,
+                        ollama_model = EXCLUDED.ollama_model,
+                        claude_model = EXCLUDED.claude_model,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (config_name, selected_llm_service, ollama_model, claude_model))
+                self.connection.commit()
+                logger.info(f"Successfully saved AI configuration for '{config_name}'")
+                return True
+        except Exception as e:
+            logger.error(f"Failed to save AI configuration: {e}")
+            if self.connection:
+                self.connection.rollback()
+            return False
+
+    def get_ai_config(self, config_name: str = 'default_ai_config') -> Optional[Dict[str, Any]]:
+        """
+        Retrieve AI configuration by name.
+
+        Args:
+            config_name: Name of the configuration (defaults to 'default_ai_config').
+
+        Returns:
+            AI configuration data or None if not found.
+        """
+        if not self._ensure_connection():
+            return None
+
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT selected_llm_service, ollama_model, claude_model
+                    FROM ai_configurations
+                    WHERE config_name = %s
+                """, (config_name,))
+                result = cursor.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.error(f"Failed to retrieve AI configuration: {e}")
+            return None
 
     def is_available(self) -> bool:
         """Check if database service is available"""

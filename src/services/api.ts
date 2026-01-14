@@ -1,6 +1,6 @@
-import { CallRequest, CallResponse, CallHistoryItem, ApiResponse } from '../types';
+import { CallRequest, CallResponse, CallHistoryItem, ApiResponse, AIConfigResponse, AIConfigUpdateRequest, AIStatusResponse } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiService {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>> {
@@ -63,8 +63,24 @@ class ApiService {
     });
   }
 
-  async getAIStatus(): Promise<ApiResponse<{ ollama_available: boolean; service: string; model: string | null; api_url?: string }>> {
-    return this.request<{ ollama_available: boolean; service: string; model: string | null; api_url?: string }>('/api/ai/status');
+  async getAIStatus(): Promise<ApiResponse<AIStatusResponse>> {
+    return this.request<AIStatusResponse>('/api/ai/status');
+  }
+
+  async getAIConfig(): Promise<ApiResponse<AIConfigResponse>> {
+    return this.request<AIConfigResponse>('/api/ai/config');
+  }
+
+  async updateAIConfig(config: AIConfigUpdateRequest): Promise<ApiResponse<AIConfigResponse>> {
+    return this.request<AIConfigResponse>('/api/ai/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async testAIConnection(service: 'ollama' | 'claude'): Promise<ApiResponse<any>> {
+    // Backend test endpoints are GET and rely on environment variables
+    return this.request<any>(`/api/ai/test/${service}`);
   }
 }
 

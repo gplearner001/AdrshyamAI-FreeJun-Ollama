@@ -25,7 +25,8 @@ class ClaudeService:
     def __init__(self):
         self.api_key = os.getenv('ANTHROPIC_API_KEY')
         self.client = None
-        
+        self.model = "claude-3-5-sonnet-20241022" # Default Claude model
+
         logger.info(f"ANTHROPIC_API_KEY found: {bool(self.api_key)}")
         logger.info(f"Anthropic library available: {ANTHROPIC_AVAILABLE}")
         
@@ -66,7 +67,7 @@ class ClaudeService:
             prompt = self._build_flow_generation_prompt(call_context)
             
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=self.model,
                 max_tokens=1000,
                 temperature=0.3,
                 messages=[
@@ -87,12 +88,13 @@ class ClaudeService:
             logger.error(f"Error generating call flow with Claude: {str(e)}")
             return self._get_conversation_flow()
     
-    async def generate_conversation_response(self, conversation_context: Dict[str, Any]) -> str:
+    async def generate_conversation_response(self, conversation_context: Dict[str, Any], model_override: Optional[str] = None) -> str:
         """
         Generate a conversation response using Claude.
 
         Args:
             conversation_context: Dictionary containing conversation history and context
+            model_override: Optional override for the Claude model to use.
 
         Returns:
             Generated response text
@@ -127,7 +129,7 @@ class ClaudeService:
             prompt = self._build_conversation_prompt(conversation_context, knowledge_base_context)
 
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=model_override or self.model, # Use override if provided
                 max_tokens=500,
                 temperature=0.7,
                 messages=[

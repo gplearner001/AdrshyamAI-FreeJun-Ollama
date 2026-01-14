@@ -5,6 +5,8 @@ import { apiService } from '../services/api';
 export const AIStatusIndicator: React.FC = () => {
   const [aiStatus, setAiStatus] = useState<{
     ollama_available: boolean;
+    claude_available?: boolean;
+    active_service?: string;
     service: string;
     model: string | null;
     api_url?: string;
@@ -25,7 +27,7 @@ export const AIStatusIndicator: React.FC = () => {
     };
 
     checkAIStatus();
-    const interval = setInterval(checkAIStatus, 60000); // Check every minute
+    const interval = setInterval(checkAIStatus, 60000);
 
     return () => clearInterval(interval);
   }, []);
@@ -43,25 +45,29 @@ export const AIStatusIndicator: React.FC = () => {
     return (
       <div className="flex items-center gap-2 text-red-600">
         <Brain className="w-4 h-4" />
-        <span className="text-sm">AdrshyamAI Service Offline</span>
+        <span className="text-sm">AI Service Offline</span>
       </div>
     );
   }
 
+  const isAvailable = aiStatus.active_service === 'ollama'
+    ? aiStatus.ollama_available
+    : aiStatus.claude_available;
+
+  const serviceName = aiStatus.active_service === 'ollama' ? 'Ollama' : 'Claude';
+
   return (
     <div className={`flex items-center gap-2 ${
-      aiStatus.ollama_available ? 'text-green-600' : 'text-gray-500'
+      isAvailable ? 'text-green-600' : 'text-orange-500'
     }`}>
-      {aiStatus.ollama_available ? (
+      {isAvailable ? (
         <BrainCircuit className="w-4 h-4" />
       ) : (
         <Brain className="w-4 h-4" />
       )}
       <span className="text-sm">
-        {aiStatus.ollama_available
-          ? `AdrshyamAI LLM Active`
-          : 'AdrshyamAI Service Unavailable'
-        }
+        {serviceName} {isAvailable ? 'Active' : 'Inactive'}
+        {aiStatus.model && <span className="text-xs ml-1">({aiStatus.model})</span>}
       </span>
     </div>
   );

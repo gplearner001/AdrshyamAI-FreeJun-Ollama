@@ -109,7 +109,7 @@ class OllamaService:
     # -------------------------------------------------------
     # 🧠 Generate conversation response
     # -------------------------------------------------------
-    async def generate_conversation_response(self, conversation_context: Dict[str, Any]) -> str:
+    async def generate_conversation_response(self, conversation_context: Dict[str, Any], model_override: Optional[str] = None) -> str:
         """Generate conversation response using Ollama."""
         if not self.is_available():
             return "Hello! How can I help you today?"
@@ -137,7 +137,7 @@ class OllamaService:
             prompt = self._build_conversation_prompt(conversation_context, knowledge_base_context, active_prompt)
 
             # Generate completion
-            response = self._generate_completion(prompt, temperature=0.7, max_tokens=500)
+            response = self._generate_completion(prompt, temperature=0.7, max_tokens=500, model_override=model_override)
             return response.strip() if response else "I'm here. Please continue."
 
         except Exception as e:
@@ -147,7 +147,7 @@ class OllamaService:
     # -------------------------------------------------------
     # 🔧 Generate completion (send to Ollama)
     # -------------------------------------------------------
-    def _generate_completion(self, prompt: str, temperature: float = 0.7, max_tokens: int = 500) -> str:
+    def _generate_completion(self, prompt: str, temperature: float = 0.7, max_tokens: int = 500, model_override: Optional[str] = None) -> str:
         """Generate completion using Ollama."""
         try:
             headers = {
@@ -155,7 +155,7 @@ class OllamaService:
                 'Authorization': f'Bearer {os.getenv("OLLAMA_API_KEY", "")}'
             }
             payload = {
-                "model": self.model,
+                "model": model_override or self.model, # Use override if provided
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
                 "keep_alive": -1

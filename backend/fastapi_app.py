@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from websocket_handler import websocket_handler
@@ -25,6 +25,7 @@ from conversational_prompt_routes import router as prompt_router
 from rag_service import rag_service
 from database_service import database_service
 from webhook_service import webhook_service
+from claude_service import claude_service # Import Claude service
 
 # Teler imports
 try:
@@ -77,6 +78,17 @@ class CallInitiateRequest(BaseModel):
     status_callback_url: Optional[str] = None
     record: bool = True
     knowledge_base_id: Optional[str] = None
+
+class AIConfigUpdateRequest(BaseModel):
+    selected_llm_service: str = Field(..., description="Selected LLM service: 'ollama' or 'claude'")
+    ollama_model: Optional[str] = Field(None, description="Specific Ollama model to use (optional override)")
+    claude_model: Optional[str] = Field(None, description="Specific Claude model to use (optional override)")
+
+class AIConfigResponse(BaseModel):
+    selected_llm_service: str
+    ollama_model: Optional[str]
+    claude_model: Optional[str]
+    message: str = "AI configuration retrieved successfully"
 
 # Mock Teler client for development
 class MockTelerClient:
@@ -157,7 +169,8 @@ async def health_check():
         'timestamp': datetime.now().isoformat(),
         'teler_available': TELER_AVAILABLE,
         'ollama_available': ollama_service.is_available(),
-        'sarvam_available': sarvam_service.is_available()
+        'sarvam_available': sarvam_service.is_available(),
+        'claude_available': claude_service.is_available() # Add Claude status
     }
 
 @app.post("/flow", status_code=status.HTTP_200_OK)
@@ -337,9 +350,17 @@ async def get_call_details(call_id: str):
 
 @app.post("/api/ai/conversation")
 async def ai_conversation(data: dict = Body(...)):
-    """Generate AI conversation responses using Ollama."""
-    if not ollama_service.is_available():
-        raise HTTPException(status_code=503, detail="Ollama LLM service not available")
+    """Generate AI conversation responses using the configured LLM."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available for AI configuration")
+
+    ai_config = database_service.get_ai_config()
+    if not ai_config:
+        raise HTTPException(status_code=500, detail="AI configuration not found in database. Please configure it via /api/ai/config.")
+
+    selected_llm_service = ai_config.get('selected_llm_service', 'ollama')
+    ollama_model_override = ai_config.get('ollama_model')
+    claude_model_override = ai_config.get('claude_model')
 
     conversation_context = {
         'history': data.get('history', []),
@@ -350,15 +371,34 @@ async def ai_conversation(data: dict = Body(...)):
     }
 
     try:
-        response_text = await ollama_service.generate_conversation_response(conversation_context)
+        response_text = ""
+        if selected_llm_service == 'ollama':
+            if not ollama_service.is_available():
+                raise HTTPException(status_code=503, detail="Ollama LLM service not available")
+            response_text = await ollama_service.generate_conversation_response(
+                conversation_context,
+                model_override=ollama_model_override
+            )
+        elif selected_llm_service == 'claude':
+            if not claude_service.is_available():
+                raise HTTPException(status_code=503, detail="Claude LLM service not available")
+            response_text = await claude_service.generate_conversation_response(
+                conversation_context,
+                model_override=claude_model_override
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported LLM service: {selected_llm_service}")
 
         return {
             'success': True,
             'data': {
                 'response': response_text,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'llm_service_used': selected_llm_service
             }
         }
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.error(f"Error in AI conversation endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")
@@ -370,11 +410,91 @@ async def ai_status():
         'success': True,
         'data': {
             'ollama_available': ollama_service.is_available(),
-            'service': 'Ollama LLM',
-            'model': ollama_service.model if ollama_service.is_available() else None,
-            'api_url': ollama_service.api_url
+            'claude_available': claude_service.is_available(),
+            'ollama_model': ollama_service.model if ollama_service.is_available() else None,
+            'claude_model': claude_service.model if claude_service.is_available() else None,
+            'ollama_api_url': ollama_service.api_url
         }
     }
+
+@app.get("/api/ai/config", response_model=AIConfigResponse)
+async def get_ai_config():
+    """Get the current AI configuration from PostgreSQL."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    config = database_service.get_ai_config()
+    if not config:
+        # Return a default config if none found, but log a warning
+        logger.warning("No AI configuration found in database, returning default.")
+        return AIConfigResponse(
+            selected_llm_service='ollama',
+            ollama_model=ollama_service.model,
+            claude_model=claude_service.model,
+            message="No specific AI configuration found, returning defaults."
+        )
+    
+    return AIConfigResponse(
+        selected_llm_service=config.get('selected_llm_service', 'ollama'),
+        ollama_model=config.get('ollama_model', ollama_service.model),
+        claude_model=config.get('claude_model', claude_service.model),
+        message="AI configuration retrieved successfully"
+    )
+
+@app.post("/api/ai/config", response_model=AIConfigResponse)
+async def update_ai_config(request: AIConfigUpdateRequest):
+    """Update the AI configuration in PostgreSQL."""
+    if not database_service.is_available():
+        raise HTTPException(status_code=503, detail="Database service not available")
+
+    if request.selected_llm_service not in ['ollama', 'claude']:
+        raise HTTPException(status_code=400, detail="Invalid LLM service. Must be 'ollama' or 'claude'.")
+
+    success = database_service.save_ai_config(
+        selected_llm_service=request.selected_llm_service,
+        ollama_model=request.ollama_model,
+        claude_model=request.claude_model
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save AI configuration to database.")
+    
+    # Retrieve the saved config to ensure consistency in response
+    saved_config = database_service.get_ai_config()
+    if not saved_config:
+        raise HTTPException(status_code=500, detail="Failed to retrieve saved AI configuration.")
+
+    return AIConfigResponse(
+        selected_llm_service=saved_config.get('selected_llm_service', 'ollama'),
+        ollama_model=saved_config.get('ollama_model', ollama_service.model),
+        claude_model=saved_config.get('claude_model', claude_service.model),
+        message="AI configuration updated successfully"
+    )
+
+@app.get("/api/ai/test/ollama")
+async def test_ollama_service():
+    """Test Ollama service availability."""
+    if ollama_service.is_available():
+        return {
+            'success': True,
+            'message': 'Ollama service is available and responsive.',
+            'model': ollama_service.model,
+            'api_url': ollama_service.api_url
+        }
+    else:
+        raise HTTPException(status_code=503, detail="Ollama service is not available or failed to connect.")
+
+@app.get("/api/ai/test/claude")
+async def test_claude_service():
+    """Test Claude service availability."""
+    if claude_service.is_available():
+        return {
+            'success': True,
+            'message': 'Claude service is available and responsive.',
+            'model': claude_service.model
+        }
+    else:
+        raise HTTPException(status_code=503, detail="Claude service is not available or API key is missing/invalid.")
 
 @app.websocket("/media-stream")
 async def handle_media_stream(websocket: WebSocket):
@@ -624,6 +744,7 @@ if __name__ == "__main__":
     logger.info(f"  - VOYAGE_API_KEY: {'***' + os.getenv('VOYAGE_API_KEY', 'NOT_SET')[-4:] if os.getenv('VOYAGE_API_KEY') else 'NOT_SET'}")
     logger.info(f"Ollama LLM available: {ollama_service.is_available()}")
     logger.info(f"Sarvam AI available: {sarvam_service.is_available()}")
+    logger.info(f"Claude AI available: {claude_service.is_available()}") # Log Claude status
     logger.info(f"RAG Service available: {rag_service.is_available()}")
     logger.info(f"WebRTC VAD available: {vad_processor is not None}")
     logger.info(f"Database service available: {database_service.is_available()}")
