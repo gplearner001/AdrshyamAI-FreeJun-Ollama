@@ -10,8 +10,8 @@ export function AIConfigManager() {
   const [claudeModelOverride, setClaudeModelOverride] = useState<string>('');
 
   // State for *status/environment* information (from /api/ai/status)
-  const [ollamaApiUrlDisplay, setOllamaApiUrlDisplay] = useState<string>('');
-  const [ollamaDefaultModel, setOllamaDefaultModel] = useState<string>('');
+  const [ollamaApiUrlDisplay, setOllamaApiUrlDisplay] = useState<string>('https://ollama.com');
+  const [ollamaDefaultModel, setOllamaDefaultModel] = useState<string>('gpt-oss:120b-cloud');
   const [ollamaAvailable, setOllamaAvailable] = useState<boolean>(false);
 
   const [claudeDefaultModel, setClaudeDefaultModel] = useState<string>('');
@@ -43,8 +43,8 @@ export function AIConfigManager() {
       // Fetch AI service status (environment defaults, availability)
       const statusResponse = await apiService.getAIStatus();
       if (statusResponse.success) {
-        setOllamaApiUrlDisplay(statusResponse.data.ollama_api_url || 'https://ollama.com');
-        setOllamaDefaultModel(statusResponse.data.ollama_model || 'gpt-oss:120b-cloud');
+        setOllamaApiUrlDisplay(statusResponse.data.ollama_api_url || '');
+        setOllamaDefaultModel(statusResponse.data.ollama_model || '');
         setOllamaAvailable(statusResponse.data.ollama_available);
 
         setClaudeDefaultModel(statusResponse.data.claude_model || 'Not set');
