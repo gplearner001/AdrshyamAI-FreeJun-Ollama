@@ -43,8 +43,8 @@ export function AIConfigManager() {
       // Fetch AI service status (environment defaults, availability)
       const statusResponse = await apiService.getAIStatus();
       if (statusResponse.success) {
-        setOllamaApiUrlDisplay(statusResponse.data.ollama_api_url || 'Not configured');
-        setOllamaDefaultModel(statusResponse.data.ollama_model || 'Not set');
+        setOllamaApiUrlDisplay(statusResponse.data.ollama_api_url || 'https://ollama.com');
+        setOllamaDefaultModel(statusResponse.data.ollama_model || 'gpt-oss:120b-cloud');
         setOllamaAvailable(statusResponse.data.ollama_available);
 
         setClaudeDefaultModel(statusResponse.data.claude_model || 'Not set');
