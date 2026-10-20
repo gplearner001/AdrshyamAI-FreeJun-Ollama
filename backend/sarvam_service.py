@@ -192,14 +192,14 @@ class SarvamAIService:
         except Exception as e:
             logger.warning(f"Failed to save debug audio files: {e}")
     
-    async def text_to_speech(self, text: str, language: str = "en-IN", speaker: str = "anushka") -> Optional[str]:
+    async def text_to_speech(self, text: str, language: str = "en-IN", speaker: str = "priya") -> Optional[str]:
         """
         Convert text to speech using Sarvam AI TTS API.
 
         Args:
             text: Text to convert to speech
             language: Language code (default: en-IN for Hindi)
-            speaker: Speaker voice (default: anushka)
+            speaker: Speaker voice (default: priya)
 
         Returns:
             Base64 encoded audio data or None if failed
@@ -221,8 +221,8 @@ class SarvamAIService:
 
             # Use default valid speaker if provided speaker is invalid
             if speaker not in valid_speakers:
-                logger.warning(f"Invalid speaker '{speaker}', using default 'anushka' -> 'anushka'")
-                speaker = 'anushka'
+                logger.warning(f"Invalid speaker '{speaker}', using default 'priya' -> 'priya'")
+                speaker = 'priya'
 
             # Prepare the request payload
             payload = {
