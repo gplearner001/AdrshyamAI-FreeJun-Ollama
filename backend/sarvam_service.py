@@ -234,7 +234,7 @@ class SarvamAIService:
                 "loudness": 1.0,
                 "speech_sample_rate": 8000,
                 "enable_preprocessing": True,
-                "model": "bulbul:v2"
+                "model": "bulbul:v3"
             }
             
             headers = {
